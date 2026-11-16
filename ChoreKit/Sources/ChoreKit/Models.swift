@@ -168,12 +168,8 @@ public struct Prize: Codable, Equatable, Identifiable, Sendable {
     }
 
     public static let starterPot: [Prize] = [
+        Prize(name: "50¢", weight: 60),
         Prize(name: "$1", weight: 40),
-        Prize(name: "$5", weight: 25),
-        Prize(name: "Pick dinner", weight: 15),
-        Prize(name: "Skip a chore", weight: 10),
-        Prize(name: "$10", weight: 8),
-        Prize(name: "$20 jackpot", weight: 2),
     ]
 }
 

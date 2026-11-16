@@ -11,6 +11,7 @@ struct SpinView: View {
     @State private var spinStart = Date()
     @State private var showPrize = false
     @State private var spinning = false
+    @State private var burstAt: Date?
 
     var spinsLeft: Int { store.state?.spinsLeft(for: me) ?? 0 }
 
@@ -53,6 +54,18 @@ struct SpinView: View {
                 }
             }
             .padding(28)
+            if let burstAt {
+                GeometryReader { g in
+                    // Gold pixel shower when the prize lands.
+                    ForEach(0..<3, id: \.self) { i in
+                        PixelBurst(origin: CGPoint(x: g.size.width * [0.2, 0.5, 0.8][i], y: g.size.height * 0.32),
+                                   start: burstAt.addingTimeInterval(Double(i) * 0.1),
+                                   count: 50, pixel: 10, colors: PixelBurst.gold, seed: UInt64(5 + i))
+                    }
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -75,6 +88,7 @@ struct SpinView: View {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
                 withAnimation(.spring) { showPrize = true }
+                burstAt = Date()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 GameAudio.shared.win(big: won.prize.name.lowercased().contains("jackpot"))
                 spinning = false

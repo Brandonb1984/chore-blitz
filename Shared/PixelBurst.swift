@@ -34,6 +34,11 @@ struct PixelBurst: View {
     }
 }
 
+extension PixelBurst {
+    /// Gold-and-white palette for prize wins.
+    static let gold: [Color] = [.yellow, .orange, .white, Color(red: 1, green: 0.84, blue: 0.2)]
+}
+
 struct SeededRNG: RandomNumberGenerator {
     private var state: UInt64
     init(seed: UInt64) { state = seed &+ 0x9E3779B97F4A7C15 }

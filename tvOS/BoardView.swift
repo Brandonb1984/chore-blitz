@@ -62,30 +62,18 @@ struct RunningBoard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .center) {
-                Text("Chore Blitz").font(.system(size: 56, weight: .heavy, design: .rounded))
-                Spacer()
-                Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
-                    .font(.title2).foregroundStyle(.secondary)
-                    .padding(.trailing, 40)
-                if blitz.hasTimer {
-                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        let left = blitz.remaining(at: ctx.date) ?? 0
-                        Text(countdownText(left))
-                            .font(.system(size: 110, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(left > 0 ? (left < 300 ? Color.yellow : Color.white) : Color.red)
-                    }
+            // Reward pills sit in the header when there's room, so the
+            // cards keep their height; otherwise they get their own row.
+            ViewThatFits(in: .horizontal) {
+                header(inlineRewards: true)
+                VStack(alignment: .leading, spacing: 24) {
+                    header(inlineRewards: false)
+                    rewards
                 }
             }
             ProgressView(value: Double(blitz.tasks(in: .done).count), total: Double(max(blitz.tasks.count, 1)))
                 .tint(.green)
                 .scaleEffect(x: 1, y: 3, anchor: .center)
-            if !blitz.allRewards.isEmpty {
-                HStack(spacing: 24) {
-                    ForEach(blitz.allRewards, id: \.person) { RewardPill(blitz: blitz, reward: $0) }
-                }
-            }
             GeometryReader { geo in
                 let widths = columnWidths(total: geo.size.width)
                 HStack(alignment: .top, spacing: Self.columnSpacing) {
@@ -102,6 +90,39 @@ struct RunningBoard: View {
     }
 
     static let columnSpacing: CGFloat = 40
+
+    @ViewBuilder var rewards: some View {
+        if !blitz.allRewards.isEmpty {
+            HStack(spacing: 24) {
+                ForEach(blitz.allRewards, id: \.person) { RewardPill(blitz: blitz, reward: $0) }
+            }
+        }
+    }
+
+    func header(inlineRewards: Bool) -> some View {
+        HStack(alignment: .center, spacing: 0) {
+            Text("Chore Blitz").font(.system(size: 56, weight: .heavy, design: .rounded))
+                .fixedSize()
+            if inlineRewards {
+                rewards.fixedSize().padding(.leading, 40)
+            }
+            Spacer(minLength: 40)
+            Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
+                .font(.title2).foregroundStyle(.secondary)
+                .fixedSize()
+            if blitz.hasTimer {
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    let left = blitz.remaining(at: ctx.date) ?? 0
+                    Text(countdownText(left))
+                        .font(.system(size: 110, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(left > 0 ? (left < 300 ? Color.yellow : Color.white) : Color.red)
+                        .fixedSize()
+                }
+                .padding(.leading, 40)
+            }
+        }
+    }
 
     /// Every column gets a minimum width; the rest is shared by how many
     /// chores each holds, so a fresh blitz's long Open column gets room.

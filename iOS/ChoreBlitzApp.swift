@@ -20,6 +20,14 @@ struct ChoreBlitzApp: App {
             .onChange(of: scenePhase, initial: true) { _, phase in
                 if phase == .active { store.startPolling() } else { store.stopPolling() }
             }
+            #if targetEnvironment(macCatalyst)
+            .onAppear {
+                // Mac window: keep it from being squeezed narrower than a phone screen.
+                for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+                    scene.sizeRestrictions?.minimumSize = CGSize(width: 480, height: 600)
+                }
+            }
+            #endif
         }
     }
 }
@@ -30,7 +38,7 @@ struct WhoAreYouView: View {
     var body: some View {
         VStack(spacing: 24) {
             Text("Chore Blitz").font(.largeTitle.bold())
-            Text("Who's using this phone?").font(.title3).foregroundStyle(.secondary)
+            Text(deviceQuestion).font(.title3).foregroundStyle(.secondary)
             ForEach(Person.allCases) { p in
                 Button { pick(p) } label: {
                     HStack(spacing: 16) {
@@ -114,3 +122,9 @@ extension HouseholdStore {
         Task { await apply(change) }
     }
 }
+
+#if targetEnvironment(macCatalyst)
+private let deviceQuestion = "Who's using this Mac?"
+#else
+private let deviceQuestion = "Who's using this phone?"
+#endif

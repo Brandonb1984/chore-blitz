@@ -48,6 +48,7 @@ struct IdleView: View {
         ScrollView {
             VStack(spacing: 24) {
                 SpinBanner(me: me)
+                EarningsCard(me: me)
                 if let last = lastBlitz, last.isOver {
                     FinishedCard(me: me, blitz: last)
                 }

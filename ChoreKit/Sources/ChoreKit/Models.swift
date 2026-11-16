@@ -185,6 +185,41 @@ public struct Prize: Codable, Equatable, Identifiable, Sendable {
     ]
 }
 
+public extension Prize {
+    /// Money in a prize name, in cents: "5¢" → 5, "$1" → 100, "$5 jackpot" → 500,
+    /// "$0.50" → 50. nil when there's no amount (e.g. "Pick dinner").
+    static func cents(in text: String) -> Int? {
+        let dollars = try! Regex(#"\$\s*(\d+)(?:\.(\d{1,2}))?"#)
+        if let m = text.firstMatch(of: dollars) {
+            let whole = m.output[1].substring.flatMap { Int($0) } ?? 0
+            var frac = m.output[2].substring.map(String.init) ?? "0"
+            if frac.count == 1 { frac += "0" }
+            return whole * 100 + (Int(frac) ?? 0)
+        }
+        let cents = try! Regex(#"(\d+)\s*(?:¢|c\b|cents?\b)"#).ignoresCase()
+        if let m = text.firstMatch(of: cents) {
+            return m.output[1].substring.flatMap { Int($0) }
+        }
+        return nil
+    }
+
+    var cents: Int? { Prize.cents(in: name) }
+
+    /// 135 → "$1.35", 50 → "50¢", 500 → "$5".
+    static func format(cents: Int) -> String {
+        if cents < 100 { return "\(cents)¢" }
+        return cents % 100 == 0 ? "$\(cents / 100)" : String(format: "$%d.%02d", cents / 100, cents % 100)
+    }
+}
+
+/// What someone has won from prize spins.
+public struct Earnings: Equatable, Sendable {
+    public var owedCents: Int
+    public var paidCents: Int
+    public var spins: Int
+    public var totalCents: Int { owedCents + paidCents }
+}
+
 public struct Spin: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var person: Person
@@ -234,6 +269,17 @@ public struct HouseholdState: Codable, Equatable, Sendable {
     }
     public var allSpins: [Spin] { spinLog ?? [] }
     public var unpaidSpins: [Spin] { allSpins.filter { $0.paidAt == nil && $0.prize.isPayable } }
+
+    /// Money won from spins: still owed, already paid, and the total.
+    public func earnings(for person: Person) -> Earnings {
+        let mine = allSpins.filter { $0.person == person }
+        var e = Earnings(owedCents: 0, paidCents: 0, spins: mine.count)
+        for s in mine {
+            let c = s.prize.cents ?? 0
+            if s.paidAt == nil { e.owedCents += c } else { e.paidCents += c }
+        }
+        return e
+    }
 
     public init(chores: [Chore], blitz: Blitz? = nil) {
         self.chores = chores

@@ -206,6 +206,48 @@ struct SpinBanner: View {
 }
 
 /// Unpaid spin winnings, for parents to mark paid.
+/// "You've earned $3.45": total won from spins, what's still owed, what's paid.
+struct EarningsSummary: View {
+    let me: Person
+    let earner: Person
+    let earnings: Earnings
+
+    var body: some View {
+        HStack(spacing: 14) {
+            PersonBadge(person: earner, size: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(me == earner ? "You've earned \(Prize.format(cents: earnings.totalCents))"
+                                  : "\(earner.name) has earned \(Prize.format(cents: earnings.totalCents))")
+                    .font(.title3.bold())
+                Text("\(Prize.format(cents: earnings.owedCents)) to be paid · \(Prize.format(cents: earnings.paidCents)) paid · \(earnings.spins) spin\(earnings.spins == 1 ? "" : "s")")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// Earnings card for the Today screen when no list is running.
+struct EarningsCard: View {
+    let me: Person
+    @EnvironmentObject var store: HouseholdStore
+
+    var body: some View {
+        if let s = store.state {
+            ForEach(Array(HouseholdState.spinners).sorted { $0.rawValue < $1.rawValue }, id: \.self) { earner in
+                let e = s.earnings(for: earner)
+                if e.spins > 0 && (me == earner || me.isParent) {
+                    EarningsSummary(me: me, earner: earner, earnings: e)
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.yellow.opacity(0.15)))
+                }
+            }
+        }
+    }
+}
+
 struct WinningsSection: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
@@ -213,8 +255,15 @@ struct WinningsSection: View {
     var body: some View {
         let unpaid = store.state?.unpaidSpins ?? []
         let game = store.state?.isGameMode ?? false
-        if !unpaid.isEmpty {
+        let earners = Array(HouseholdState.spinners).filter { p in
+            (store.state?.earnings(for: p).spins ?? 0) > 0 && (me == p || me.isParent)
+        }
+        if !unpaid.isEmpty || !earners.isEmpty {
             Section {
+                ForEach(earners, id: \.self) { p in
+                    EarningsSummary(me: me, earner: p, earnings: store.state!.earnings(for: p))
+                }
+                .listRowBackground(game ? Color.white.opacity(0.09) : nil)
                 ForEach(unpaid) { spin in
                     HStack {
                         PersonBadge(person: spin.person)

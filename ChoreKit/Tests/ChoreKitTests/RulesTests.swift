@@ -338,4 +338,28 @@ final class RulesTests: XCTestCase {
         try s.setPrizePot([Prize(name: "$2", weight: 1)], by: .kira)
         XCTAssertEqual(s.prizes.map(\.name), ["$2"])
     }
+
+    func testPrizeCentsAndEarnings() throws {
+        XCTAssertEqual(Prize.cents(in: "5¢"), 5)
+        XCTAssertEqual(Prize.cents(in: "25 cents"), 25)
+        XCTAssertEqual(Prize.cents(in: "$1"), 100)
+        XCTAssertEqual(Prize.cents(in: "$5 jackpot"), 500)
+        XCTAssertEqual(Prize.cents(in: "$0.5"), 50)
+        XCTAssertNil(Prize.cents(in: "Pick dinner"))
+        XCTAssertEqual(Prize.format(cents: 135), "$1.35")
+        XCTAssertEqual(Prize.format(cents: 50), "50¢")
+        XCTAssertEqual(Prize.format(cents: 500), "$5")
+
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(3).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        try s.setPrizePot([Prize(name: "25¢", weight: 1)], by: .kira)
+        for t in s.blitz!.tasks.prefix(2) { try s.markDone(taskID: t.id, by: .reagen, now: t0) }
+        let a = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        try s.markSpinPaid(a.id, by: .brandon, now: t0)
+        XCTAssertEqual(s.earnings(for: .reagen), Earnings(owedCents: 25, paidCents: 25, spins: 2))
+        XCTAssertEqual(s.earnings(for: .reagen).totalCents, 50)
+    }
 }

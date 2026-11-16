@@ -37,6 +37,7 @@ targets:
       properties:
         CFBundleDisplayName: Chore Blitz
         UILaunchScreen: {}
+        NSCameraUsageDescription: Take a photo of a room so Chore Blitz can suggest chores. The photo stays on your phone.
         ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

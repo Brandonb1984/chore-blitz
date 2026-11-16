@@ -8,6 +8,7 @@ struct ChoreLibraryView: View {
     @AppStorage("me") private var meRaw = ""
     @State private var editing: Chore?
     @State private var adding = false
+    @State private var scanning = false
 
     var chores: [Chore] { store.state?.chores ?? [] }
     var rooms: [String] { store.state?.rooms ?? [] }
@@ -22,6 +23,10 @@ struct ChoreLibraryView: View {
                                 .font(.title3.bold())
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 6)
+                        }
+                        Button { scanning = true } label: {
+                            Label("Scan a room", systemImage: "camera.viewfinder")
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
@@ -64,6 +69,7 @@ struct ChoreLibraryView: View {
                     } label: { PersonBadge(person: me) }
                 }
             }
+            .sheet(isPresented: $scanning) { RoomScanView(me: me) }
             .sheet(isPresented: $adding) {
                 ChoreEditorView(title: "New chore", chore: Chore(name: "", room: rooms.first ?? "Kitchen", minutes: 10, steps: [""]),
                                 rooms: rooms) { new in

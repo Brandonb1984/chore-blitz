@@ -168,11 +168,20 @@ public struct Prize: Codable, Equatable, Identifiable, Sendable {
     }
 
     /// Small bonuses (Brandon, Nov 2026): mostly 50¢, sometimes $1.
-    static let legacyStarterNames: Set<String> = ["$1", "$5", "Pick dinner", "Skip a chore", "$10", "$20 jackpot"]
+    /// Starter pots from earlier builds; a saved copy of one is swapped for the current starter pot.
+    static let legacyStarterNames: Set<Set<String>> = [
+        ["$1", "$5", "Pick dinner", "Skip a chore", "$10", "$20 jackpot"],
+        ["50¢", "$1"],
+    ]
 
+    /// Small bonuses (Brandon, Nov 2026): usually 5¢–$1, with a really rare $5.
     public static let starterPot: [Prize] = [
-        Prize(name: "50¢", weight: 60),
-        Prize(name: "$1", weight: 40),
+        Prize(name: "5¢", weight: 25),
+        Prize(name: "10¢", weight: 25),
+        Prize(name: "25¢", weight: 25),
+        Prize(name: "50¢", weight: 15),
+        Prize(name: "$1", weight: 9),
+        Prize(name: "$5 jackpot", weight: 1),
     ]
 }
 
@@ -218,7 +227,7 @@ public struct HouseholdState: Codable, Equatable, Sendable {
     public var prizes: [Prize] {
         // The first Game mode build shipped a bigger starter pot. If that's
         // what's saved, use the new 50¢/$1 pot instead.
-        guard let pot = prizePot, Set(pot.map(\.name)) != Prize.legacyStarterNames else {
+        guard let pot = prizePot, !Prize.legacyStarterNames.contains(Set(pot.map(\.name))) else {
             return Prize.starterPot
         }
         return pot

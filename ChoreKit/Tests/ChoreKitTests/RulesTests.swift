@@ -331,7 +331,10 @@ final class RulesTests: XCTestCase {
         var s = HouseholdState.starter()
         let old = ["$1", "$5", "Pick dinner", "Skip a chore", "$10", "$20 jackpot"].map { Prize(name: $0, weight: 1) }
         try s.setPrizePot(old, by: .kira)
-        XCTAssertEqual(s.prizes.map(\.name), ["50¢", "$1"])
+        XCTAssertEqual(s.prizes.map(\.name), Prize.starterPot.map(\.name))
+        try s.setPrizePot([Prize(name: "50¢", weight: 60), Prize(name: "$1", weight: 40)], by: .kira)
+        XCTAssertEqual(s.prizes.map(\.name), Prize.starterPot.map(\.name))
+        XCTAssertEqual(Prize.starterPot.last?.name, "$5 jackpot")
         try s.setPrizePot([Prize(name: "$2", weight: 1)], by: .kira)
         XCTAssertEqual(s.prizes.map(\.name), ["$2"])
     }

@@ -24,9 +24,14 @@ struct ChoreLibraryView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 6)
                         }
-                        Button { scanning = true } label: {
-                            Label("Scan a room", systemImage: "camera.viewfinder")
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        if RoomScanner.canSeePhotos {
+                            Button { scanning = true } label: {
+                                Label("Scan a room", systemImage: "camera.viewfinder")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        } else {
+                            Label("Update to iOS 27 to use Scan a room", systemImage: "camera.viewfinder")
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

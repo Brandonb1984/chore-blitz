@@ -42,6 +42,18 @@ struct GeneratedChoreList {
 #endif
 
 enum RoomScanner {
+    /// True when the on-device model can look at the photo itself (iOS 27+).
+    /// Without that, suggestions from Vision labels alone were too poor to
+    /// show (tested Nov 2026), so the app hides Scan a room.
+    static var canSeePhotos: Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 27.0, *) {
+            return SystemLanguageModel.default.capabilities.contains(.vision)
+        }
+        #endif
+        return false
+    }
+
     /// nil when Apple Intelligence is ready; otherwise a plain-English reason.
     static var unavailableReason: String? {
         #if canImport(FoundationModels)
@@ -95,10 +107,13 @@ enum RoomScanner {
                 let response = try await session.respond(generating: GeneratedChoreList.self) {
                     Attachment(cg, orientation: CGImagePropertyOrientation(image!.imageOrientation))
                     """
-                    This is a photo of our \(room.lowercased()). Look at what is actually messy, dirty or out of place in it.
-                    Suggest only the 2 to 4 chores that would make the biggest difference to the mess you can see, most important first. \
-                    Fewer is better. Each chore should be something a normal family does when cleaning (no sorting by color, no inspecting). \
-                    In the steps, name the actual things in the photo (for example "Hang the jackets on hooks", not "Organize items").
+                    This is a photo of our \(room.lowercased()). We are a family of four adults with a baby.
+                    Look at what is actually messy, dirty or out of place in the photo.
+                    Suggest only the 2 to 4 chores that would make the biggest difference, most important first. Fewer is better.
+                    Steps must be concrete: name the actual things you can see and say where each thing goes \
+                    (for example "Put the books back on the shelf", "Toys go in the toy bin").
+                    Only mention things that are really in the photo. Don't invent hooks, bins or furniture you can't see; \
+                    if something has no obvious home, say "put it where it belongs".
                     Rough hints from a labeler, which may be wrong: \(hints).
                     Chores already on our list (skip these): \(skip).
                     """

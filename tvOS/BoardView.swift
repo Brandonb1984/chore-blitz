@@ -50,7 +50,7 @@ struct IdleBoard: View {
         VStack(spacing: 30) {
             Image(systemName: "sparkles").font(.system(size: 120)).foregroundStyle(.yellow)
             Text("Chore Blitz").font(.system(size: 96, weight: .heavy, design: .rounded))
-            Text("Ready when you are. Start a blitz from your phone.")
+            Text("Ready when you are. Start chores from your phone.")
                 .font(.title2).foregroundStyle(.secondary)
             Text("\(choreCount) chores in the list").font(.headline).foregroundStyle(.tertiary)
         }

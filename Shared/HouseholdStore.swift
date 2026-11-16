@@ -13,7 +13,12 @@ final class HouseholdStore: ObservableObject {
     @Published private(set) var state: HouseholdState?
     @Published private(set) var isLoading = true
     /// Plain-English problem to show, or nil when everything's fine.
-    @Published var problem: String?
+    @Published var problem: String? {
+        didSet { if problem != nil { problemShownAt = Date() } }
+    }
+    /// Keeps a problem on screen long enough to read before a background
+    /// refresh clears it.
+    private var problemShownAt = Date.distantPast
 
     /// Lazy so `-demo` runs never touch CloudKit (unsigned simulator builds
     /// have no iCloud entitlement and CKContainer traps at init).
@@ -58,7 +63,7 @@ final class HouseholdStore: ObservableObject {
             let rec = try await db.record(for: recordID)
             let fresh = try Self.decode(rec)
             if fresh != state { state = fresh }
-            problem = nil
+            if Date().timeIntervalSince(problemShownAt) > 10 { problem = nil }
         } catch let e as CKError where e.code == .unknownItem {
             state = nil
             problem = nil

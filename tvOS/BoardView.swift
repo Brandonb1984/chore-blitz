@@ -60,7 +60,7 @@ struct RunningBoard: View {
     let blitz: Blitz
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 36) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .center) {
                 Text("Chore Blitz").font(.system(size: 56, weight: .heavy, design: .rounded))
                 Spacer()
@@ -128,6 +128,7 @@ struct BoardColumn: View {
                             .font(compact ? .title3.weight(.semibold) : .title2.weight(.semibold))
                             .foregroundStyle(column == .done ? Color.white.opacity(0.75) : Color.white)
                             .lineLimit(2)
+                            .minimumScaleFactor(0.8)
                             .fixedSize(horizontal: false, vertical: true)
                         if !compact {
                             Text(subtitle(task))
@@ -143,7 +144,7 @@ struct BoardColumn: View {
                             .foregroundStyle(.green)
                     }
                 }
-                .padding(compact ? 14 : 24)
+                .padding(compact ? 14 : 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 20)
                     .fill(Color.white.opacity(column == .done ? 0.06 : 0.11)))

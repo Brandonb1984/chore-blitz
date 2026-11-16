@@ -168,6 +168,8 @@ public struct Prize: Codable, Equatable, Identifiable, Sendable {
     }
 
     /// Small bonuses (Brandon, Nov 2026): mostly 50¢, sometimes $1.
+    static let legacyStarterNames: Set<String> = ["$1", "$5", "Pick dinner", "Skip a chore", "$10", "$20 jackpot"]
+
     public static let starterPot: [Prize] = [
         Prize(name: "50¢", weight: 60),
         Prize(name: "$1", weight: 40),
@@ -213,7 +215,14 @@ public struct HouseholdState: Codable, Equatable, Sendable {
     public var spinLog: [Spin]?
 
     public var isGameMode: Bool { gameMode ?? false }
-    public var prizes: [Prize] { prizePot ?? Prize.starterPot }
+    public var prizes: [Prize] {
+        // The first Game mode build shipped a bigger starter pot. If that's
+        // what's saved, use the new 50¢/$1 pot instead.
+        guard let pot = prizePot, Set(pot.map(\.name)) != Prize.legacyStarterNames else {
+            return Prize.starterPot
+        }
+        return pot
+    }
     public var allSpins: [Spin] { spinLog ?? [] }
     public var unpaidSpins: [Spin] { allSpins.filter { $0.paidAt == nil && $0.prize.isPayable } }
 

@@ -324,4 +324,13 @@ final class RulesTests: XCTestCase {
         try s.markSpinPaid(spin.id, by: .kira, now: t0)
         XCTAssertTrue(s.unpaidSpins.isEmpty)
     }
+
+    func testOldStarterPotIsReplacedByBonuses() throws {
+        var s = HouseholdState.starter()
+        let old = ["$1", "$5", "Pick dinner", "Skip a chore", "$10", "$20 jackpot"].map { Prize(name: $0, weight: 1) }
+        try s.setPrizePot(old, by: .kira)
+        XCTAssertEqual(s.prizes.map(\.name), ["50¢", "$1"])
+        try s.setPrizePot([Prize(name: "$2", weight: 1)], by: .kira)
+        XCTAssertEqual(s.prizes.map(\.name), ["$2"])
+    }
 }

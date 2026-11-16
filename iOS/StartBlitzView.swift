@@ -151,9 +151,10 @@ struct StartBlitzView: View {
         }
     }
 
-    /// People with at least one assigned chore, in family order.
+    /// People who can get a reward and have at least one assigned chore.
     var assignedPeople: [Person] {
-        Person.allCases.filter { p in assignments.values.contains(p) }
+        // Only Reagen gets paid; Braden is an adult.
+        [Person.reagen].filter { p in assignments.values.contains(p) }
     }
 
     func prizeBinding(_ p: Person) -> Binding<String> {

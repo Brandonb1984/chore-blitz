@@ -103,6 +103,7 @@ struct RunningBlitzView: View {
     @EnvironmentObject var store: HouseholdStore
     var showTimes: Bool { store.showTimes }
     @State private var selected: UUID?
+    @AppStorage("seenHint") private var seenHint = false
 
     var mine: [BlitzTask] { blitz.tasks.filter { $0.claimedBy == me && $0.doneAt == nil } }
     var open: [BlitzTask] { blitz.tasks(in: .open) }
@@ -111,6 +112,18 @@ struct RunningBlitzView: View {
 
     var body: some View {
         List {
+            if !seenHint {
+                Section {
+                    HStack(alignment: .top) {
+                        Image(systemName: "hand.tap.fill").foregroundStyle(Color.accentColor)
+                        Text("Tap **Claim** to take a chore, then **Done** when it's finished. Tap a chore's name to see how to do it.")
+                            .font(.subheadline)
+                        Spacer()
+                        Button { seenHint = true } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
             Section {
                 if blitz.hasTimer {
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
@@ -174,7 +187,7 @@ struct RunningBlitzView: View {
             if task.column == .open {
                 Button("Claim") { store.run { try $0.claim(taskID: task.id, by: me) } }
                     .buttonStyle(.borderedProminent)
-            } else if task.column == .inProgress && task.claimedBy == me {
+            } else if task.column == .inProgress && (task.claimedBy == me || me.isParent) {
                 Button("Done") { store.run { try $0.markDone(taskID: task.id, by: me, now: .now) } }
                     .buttonStyle(.borderedProminent)
                     .tint(.green)

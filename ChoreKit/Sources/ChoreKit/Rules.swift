@@ -163,8 +163,13 @@ public extension HouseholdState {
     /// Who earns spins. Only Reagen gets paid prizes.
     static let spinners: Set<Person> = [.reagen]
 
+    /// Parents, and Reagen himself (Brandon said he can), may flip Game mode.
+    static func canSetGameMode(_ person: Person) -> Bool {
+        person.isParent || spinners.contains(person)
+    }
+
     mutating func setGameMode(_ on: Bool, by person: Person) throws {
-        guard person.isParent else { throw ChoreError.parentsOnly }
+        guard Self.canSetGameMode(person) else { throw ChoreError.parentsOnly }
         gameMode = on
     }
 

@@ -306,7 +306,9 @@ final class RulesTests: XCTestCase {
         XCTAssertThrowsError(try s.spin(by: .braden, roll: 0.1, now: t0)) {
             XCTAssertEqual($0 as? ChoreError, .notSpinner)
         }
-        XCTAssertThrowsError(try s.setGameMode(false, by: .reagen))
+        XCTAssertThrowsError(try s.setGameMode(false, by: .braden))
+        try s.setGameMode(false, by: .reagen)
+        XCTAssertFalse(s.isGameMode)
     }
 
     func testSpinsStillUsableAfterListFinishes() throws {

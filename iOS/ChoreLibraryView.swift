@@ -72,10 +72,12 @@ struct ChoreLibraryView: View {
                                 get: { showTimes },
                                 set: { v in store.run { try $0.setShowTimes(v, by: me) } }))
                         }
-                        if me.isParent {
+                        if HouseholdState.canSetGameMode(me) {
                             Toggle("Game mode", isOn: Binding(
                                 get: { store.state?.isGameMode ?? false },
                                 set: { v in store.run { try $0.setGameMode(v, by: me) } }))
+                        }
+                        if me.isParent {
                             Button("Prize pot…") { editingPrizes = true }
                             Button("Remove the starter chores", role: .destructive) { confirmingClear = true }
                         }

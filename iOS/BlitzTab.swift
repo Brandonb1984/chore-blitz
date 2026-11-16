@@ -16,7 +16,7 @@ struct BlitzTab: View {
                     IdleView(me: me, lastBlitz: store.state?.blitz) { showingStart = true }
                 }
             }
-            .navigationTitle("Chores")
+            .navigationTitle("Today")
             .toolbar {
                 if me.isParent, store.state?.runningBlitz != nil {
                     ToolbarItem(placement: .topBarTrailing) {

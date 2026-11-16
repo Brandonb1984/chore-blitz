@@ -58,7 +58,7 @@ struct RootView: View {
             if store.state != nil {
                 TabView {
                     BlitzTab(me: me)
-                        .tabItem { Label("Blitz", systemImage: "sparkles") }
+                        .tabItem { Label("Today", systemImage: "sparkles") }
                     ChoreLibraryView(me: me)
                         .tabItem { Label("Chores", systemImage: "list.bullet.rectangle") }
                 }

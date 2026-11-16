@@ -149,6 +149,52 @@ public struct Reward: Codable, Equatable, Sendable {
     }
 }
 
+/// Something in the prize pot. `weight` sets how likely it is relative to the others.
+public struct Prize: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var weight: Int
+
+    public init(id: UUID = UUID(), name: String, weight: Int) {
+        self.id = id
+        self.name = name
+        self.weight = weight
+    }
+
+    /// "Nothing this time" style prizes don't need paying out.
+    public var isPayable: Bool {
+        let n = name.lowercased()
+        return !(n.contains("nothing") || n.contains("try again"))
+    }
+
+    public static let starterPot: [Prize] = [
+        Prize(name: "$1", weight: 40),
+        Prize(name: "$5", weight: 25),
+        Prize(name: "Pick dinner", weight: 15),
+        Prize(name: "Skip a chore", weight: 10),
+        Prize(name: "$10", weight: 8),
+        Prize(name: "$20 jackpot", weight: 2),
+    ]
+}
+
+public struct Spin: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var person: Person
+    public var prize: Prize
+    public var blitzID: UUID
+    public var at: Date
+    public var paidAt: Date?
+
+    public init(id: UUID = UUID(), person: Person, prize: Prize, blitzID: UUID, at: Date) {
+        self.id = id
+        self.person = person
+        self.prize = prize
+        self.blitzID = blitzID
+        self.at = at
+        self.paidAt = nil
+    }
+}
+
 public struct PersonDone: Equatable, Sendable {
     public let person: Person
     public let tasks: [BlitzTask]
@@ -162,6 +208,17 @@ public struct HouseholdState: Codable, Equatable, Sendable {
     public var showTimes: Bool?
 
     public var timesVisible: Bool { showTimes ?? true }
+
+    // Game mode (all optional so older saved state still loads).
+    public var gameMode: Bool?
+    public var prizePot: [Prize]?
+    /// Every spin ever won, newest last, so parents can see what's owed.
+    public var spinLog: [Spin]?
+
+    public var isGameMode: Bool { gameMode ?? false }
+    public var prizes: [Prize] { prizePot ?? Prize.starterPot }
+    public var allSpins: [Spin] { spinLog ?? [] }
+    public var unpaidSpins: [Spin] { allSpins.filter { $0.paidAt == nil && $0.prize.isPayable } }
 
     public init(chores: [Chore], blitz: Blitz? = nil) {
         self.chores = chores
@@ -194,6 +251,10 @@ public enum ChoreError: Error, Equatable, LocalizedError {
     case notYourTask(Person)
     case assignedChore
     case rewardNotEarned
+    case gameModeOff
+    case noSpinsLeft
+    case emptyPrizePot
+    case notSpinner
 
     public var errorDescription: String? {
         switch self {
@@ -207,6 +268,10 @@ public enum ChoreError: Error, Equatable, LocalizedError {
         case .notYourTask(let p): return "That's \(p.name)'s chore."
         case .assignedChore: return "This one was assigned to you. Ask Brandon or Kira to swap it."
         case .rewardNotEarned: return "Not earned yet. Some assigned chores aren't done."
+        case .gameModeOff: return "Game mode is off."
+        case .noSpinsLeft: return "No spins left. Finish another chore to earn one!"
+        case .emptyPrizePot: return "The prize pot is empty. Ask Brandon or Kira to add prizes."
+        case .notSpinner: return "Spins are just for Reagen."
         }
     }
 }

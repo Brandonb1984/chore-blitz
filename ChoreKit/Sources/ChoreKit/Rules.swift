@@ -157,4 +157,58 @@ public extension HouseholdState {
         guard let i = b.tasks.firstIndex(where: { $0.id == taskID }) else { throw ChoreError.taskNotFound }
         return i
     }
+
+    // MARK: Game mode
+
+    /// Who earns spins. Only Reagen gets paid prizes.
+    static let spinners: Set<Person> = [.reagen]
+
+    mutating func setGameMode(_ on: Bool, by person: Person) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        gameMode = on
+    }
+
+    mutating func setPrizePot(_ pot: [Prize], by person: Person) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        prizePot = pot.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.weight > 0 }
+    }
+
+    /// One spin per chore this person finished in the current (or just
+    /// finished) list, minus spins already used on it.
+    func spinsLeft(for person: Person) -> Int {
+        guard isGameMode, Self.spinners.contains(person), let b = blitz else { return 0 }
+        let earned = b.tasks.filter { $0.doneAt != nil && $0.claimedBy == person }.count
+        let used = allSpins.filter { $0.person == person && $0.blitzID == b.id }.count
+        return max(0, earned - used)
+    }
+
+    /// Picks a prize by weight. `roll` is in 0..<1 (random in the app, fixed in tests).
+    static func pick(from pot: [Prize], roll: Double) -> Prize? {
+        let total = pot.reduce(0) { $0 + $1.weight }
+        guard total > 0 else { return nil }
+        var target = min(max(roll, 0), 0.999_999) * Double(total)
+        for p in pot {
+            target -= Double(p.weight)
+            if target < 0 { return p }
+        }
+        return pot.last
+    }
+
+    @discardableResult
+    mutating func spin(by person: Person, roll: Double, now: Date) throws -> Spin {
+        guard isGameMode else { throw ChoreError.gameModeOff }
+        guard Self.spinners.contains(person) else { throw ChoreError.notSpinner }
+        guard spinsLeft(for: person) > 0, let b = blitz else { throw ChoreError.noSpinsLeft }
+        guard let prize = Self.pick(from: prizes, roll: roll) else { throw ChoreError.emptyPrizePot }
+        let s = Spin(person: person, prize: prize, blitzID: b.id, at: now)
+        spinLog = allSpins + [s]
+        return s
+    }
+
+    mutating func markSpinPaid(_ spinID: UUID, by person: Person, now: Date) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        guard var log = spinLog, let i = log.firstIndex(where: { $0.id == spinID }) else { return }
+        log[i].paidAt = now
+        spinLog = log
+    }
 }

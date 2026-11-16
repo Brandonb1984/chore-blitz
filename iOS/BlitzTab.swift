@@ -1,4 +1,5 @@
 import ChoreKit
+import UIKit
 import SwiftUI
 
 struct BlitzTab: View {
@@ -46,6 +47,7 @@ struct IdleView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
+                SpinBanner(me: me)
                 if let last = lastBlitz, last.isOver {
                     FinishedCard(me: me, blitz: last)
                 }
@@ -152,7 +154,9 @@ struct RunningBlitzView: View {
                 ForEach(blitz.allRewards, id: \.person) { reward in
                     RewardRow(me: me, blitz: blitz, reward: reward)
                 }
+                SpinBanner(me: me)
             }
+            WinningsSection(me: me)
             if !mine.isEmpty {
                 Section("Your chores") {
                     ForEach(mine) { row($0) }
@@ -193,7 +197,13 @@ struct RunningBlitzView: View {
                 Button("Claim") { store.run { try $0.claim(taskID: task.id, by: me) } }
                     .buttonStyle(.borderedProminent)
             } else if task.column == .inProgress && (task.claimedBy == me || me.isParent) {
-                Button("Done") { store.run { try $0.markDone(taskID: task.id, by: me, now: .now) } }
+                Button("Done") {
+                    if store.state?.isGameMode == true {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        GameAudio.shared.kaching()
+                    }
+                    store.run { try $0.markDone(taskID: task.id, by: me, now: .now) }
+                }
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
             }

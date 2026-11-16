@@ -10,6 +10,7 @@ struct ChoreLibraryView: View {
     @State private var adding = false
     @State private var scanning = false
     @State private var confirmingClear = false
+    @State private var editingPrizes = false
 
     var chores: [Chore] { store.state?.chores ?? [] }
     var rooms: [String] { store.state?.rooms ?? [] }
@@ -72,6 +73,10 @@ struct ChoreLibraryView: View {
                                 set: { v in store.run { try $0.setShowTimes(v, by: me) } }))
                         }
                         if me.isParent {
+                            Toggle("Game mode", isOn: Binding(
+                                get: { store.state?.isGameMode ?? false },
+                                set: { v in store.run { try $0.setGameMode(v, by: me) } }))
+                            Button("Prize pot…") { editingPrizes = true }
                             Button("Remove the starter chores", role: .destructive) { confirmingClear = true }
                         }
                         Button("Switch person") { meRaw = "" }
@@ -79,6 +84,7 @@ struct ChoreLibraryView: View {
                 }
             }
             .sheet(isPresented: $scanning) { RoomScanView(me: me) }
+            .sheet(isPresented: $editingPrizes) { PrizePotView(me: me) }
             .confirmationDialog("Remove the 20 starter chores? Chores you added yourself stay.",
                                 isPresented: $confirmingClear, titleVisibility: .visible) {
                 Button("Remove starter chores", role: .destructive) {

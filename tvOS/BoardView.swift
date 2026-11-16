@@ -5,15 +5,26 @@ import UIKit
 /// The living-room board. Read-only: everything is controlled from phones.
 struct BoardView: View {
     @EnvironmentObject var store: HouseholdStore
+    var game: Bool { store.state?.isGameMode ?? false }
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.07, green: 0.09, blue: 0.16), Color(red: 0.10, green: 0.14, blue: 0.24)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            if game {
+                ArcadeBackground().ignoresSafeArea()
+            } else {
+                LinearGradient(colors: [Color(red: 0.07, green: 0.09, blue: 0.16), Color(red: 0.10, green: 0.14, blue: 0.24)],
+                               startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+            }
             content
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
+            if let state = store.state, state.isGameMode {
+                GameLayer(state: state)
+            }
+        }
+        .onChange(of: game && store.state?.runningBlitz != nil, initial: true) { _, on in
+            GameAudio.shared.setMusic(on)
         }
         .preferredColorScheme(.dark)
         .onChange(of: store.state?.runningBlitz != nil, initial: true) { _, running in
@@ -25,7 +36,7 @@ struct BoardView: View {
     @ViewBuilder var content: some View {
         if let state = store.state {
             if let blitz = state.runningBlitz {
-                RunningBoard(blitz: blitz)
+                RunningBoard(blitz: blitz, game: state.isGameMode)
             } else if let last = state.blitz, last.isOver {
                 FinishedBoard(blitz: last)
             } else {
@@ -59,6 +70,7 @@ struct IdleBoard: View {
 
 struct RunningBoard: View {
     let blitz: Blitz
+    var game = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -71,9 +83,13 @@ struct RunningBoard: View {
                     rewards
                 }
             }
-            ProgressView(value: Double(blitz.tasks(in: .done).count), total: Double(max(blitz.tasks.count, 1)))
-                .tint(.green)
-                .scaleEffect(x: 1, y: 3, anchor: .center)
+            if game {
+                XPBar(blitz: blitz)
+            } else {
+                ProgressView(value: Double(blitz.tasks(in: .done).count), total: Double(max(blitz.tasks.count, 1)))
+                    .tint(.green)
+                    .scaleEffect(x: 1, y: 3, anchor: .center)
+            }
             GeometryReader { geo in
                 let widths = columnWidths(total: geo.size.width)
                 HStack(alignment: .top, spacing: Self.columnSpacing) {
@@ -336,5 +352,35 @@ struct RewardPill: View {
         .padding(.vertical, 10)
         .background(Capsule().fill(earned ? Color.yellow.opacity(0.25) : Color.white.opacity(0.10)))
         .overlay(Capsule().stroke(reward.person.color.opacity(0.8), lineWidth: 3))
+    }
+}
+
+/// Dark purple arcade backdrop with a faint pixel grid and twinkling pixel stars.
+struct ArcadeBackground: View {
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
+            Canvas { g, size in
+                g.fill(Path(CGRect(origin: .zero, size: size)),
+                       with: .linearGradient(Gradient(colors: [Color(red: 0.06, green: 0.02, blue: 0.14),
+                                                               Color(red: 0.14, green: 0.04, blue: 0.24)]),
+                                             startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+                let cell: CGFloat = 40
+                var grid = Path()
+                var x: CGFloat = 0
+                while x < size.width { grid.addRect(CGRect(x: x, y: 0, width: 1, height: size.height)); x += cell }
+                var y: CGFloat = 0
+                while y < size.height { grid.addRect(CGRect(x: 0, y: y, width: size.width, height: 1)); y += cell }
+                g.fill(grid, with: .color(.white.opacity(0.03)))
+                let tick = Int(ctx.date.timeIntervalSince1970 * 2)
+                var rng = SeededRNG(seed: 42)
+                for i in 0..<60 {
+                    let px = (CGFloat.random(in: 0..<size.width, using: &rng) / 8).rounded() * 8
+                    let py = (CGFloat.random(in: 0..<size.height, using: &rng) / 8).rounded() * 8
+                    let on = (i + tick) % 5 != 0
+                    g.fill(Path(CGRect(x: px, y: py, width: 6, height: 6)),
+                           with: .color(.white.opacity(on ? 0.35 : 0.08)))
+                }
+            }
+        }
     }
 }

@@ -257,4 +257,71 @@ final class RulesTests: XCTestCase {
         try s.removeTask(taskID: id, by: .kira)
         XCTAssertEqual(s.blitz?.tasks.count, 2)
     }
+
+    // MARK: Game mode
+
+    func gameBlitz() throws -> HouseholdState {
+        var s = try running()
+        try s.setGameMode(true, by: .kira)
+        try s.setPrizePot([Prize(name: "$1", weight: 3), Prize(name: "$20", weight: 1)], by: .kira)
+        return s
+    }
+
+    func testPickByWeight() {
+        let pot = [Prize(name: "a", weight: 3), Prize(name: "b", weight: 1)]
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 0.0)?.name, "a")
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 0.74)?.name, "a")
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 0.75)?.name, "b")
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 1.0)?.name, "b")
+        XCTAssertNil(HouseholdState.pick(from: [], roll: 0.5))
+    }
+
+    func testSpinsEarnedPerFinishedChore() throws {
+        var s = try gameBlitz()
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .noSpinsLeft)
+        }
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[0], by: .reagen, now: t0)
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 2)
+        let first = try s.spin(by: .reagen, roll: 0.9, now: t0)
+        XCTAssertEqual(first.prize.name, "$20")
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertEqual(s.unpaidSpins.count, 2)
+    }
+
+    func testOnlyReagenSpinsAndOnlyInGameMode() throws {
+        var s = try running()
+        try s.markDone(taskID: s.blitz!.tasks[0].id, by: .reagen, now: t0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .gameModeOff)
+        }
+        try s.setGameMode(true, by: .brandon)
+        try s.markDone(taskID: s.blitz!.tasks[1].id, by: .braden, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .braden), 0)
+        XCTAssertThrowsError(try s.spin(by: .braden, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .notSpinner)
+        }
+        XCTAssertThrowsError(try s.setGameMode(false, by: .reagen))
+    }
+
+    func testSpinsStillUsableAfterListFinishes() throws {
+        var s = try gameBlitz()
+        for id in s.blitz!.tasks.map(\.id) { try s.markDone(taskID: id, by: .reagen, now: t0) }
+        XCTAssertNil(s.runningBlitz)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 2)
+    }
+
+    func testMarkSpinPaid() throws {
+        var s = try gameBlitz()
+        try s.markDone(taskID: s.blitz!.tasks[0].id, by: .reagen, now: t0)
+        let spin = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertThrowsError(try s.markSpinPaid(spin.id, by: .reagen, now: t0))
+        try s.markSpinPaid(spin.id, by: .kira, now: t0)
+        XCTAssertTrue(s.unpaidSpins.isEmpty)
+    }
 }

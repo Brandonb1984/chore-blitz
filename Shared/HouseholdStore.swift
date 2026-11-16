@@ -32,14 +32,21 @@ final class HouseholdStore: ObservableObject {
     /// (for simulator screenshots).
     /// `-demoFresh`: a just-started 12-chore blitz with nothing claimed.
     private let demoFresh = ProcessInfo.processInfo.arguments.contains("-demoFresh")
-    private var demo: Bool { demoFresh || ProcessInfo.processInfo.arguments.contains("-demo") }
+    /// `-demoGame`: the sample list with Game mode on; Reagen has 2 done
+    /// chores and 1 spin left. In Debug builds, a few seconds in he finishes
+    /// another chore and then spins, so the TV effects can be seen.
+    private let demoGame = ProcessInfo.processInfo.arguments.contains("-demoGame")
+    private var demo: Bool { demoFresh || demoGame || ProcessInfo.processInfo.arguments.contains("-demo") }
 
     init(pollSeconds: Double) {
         self.pollSeconds = pollSeconds
         if demo {
-            state = demoFresh ? Self.freshDemoState() : Self.demoState()
+            state = demoFresh ? Self.freshDemoState() : demoGame ? Self.gameDemoState() : Self.demoState()
             isLoading = false
         }
+        #if DEBUG
+        if demoGame { scheduleGameDemoEvents() }
+        #endif
     }
 
     func startPolling() {
@@ -141,6 +148,34 @@ final class HouseholdStore: ObservableObject {
         try? s.markDone(taskID: t[8], by: .brandon, now: now)
         return s
     }
+
+    private static func gameDemoState() -> HouseholdState {
+        var s = demoState()
+        try? s.setGameMode(true, by: .kira)
+        if let t = s.blitz?.tasks.map(\.id) {
+            try? s.markDone(taskID: t[2], by: .reagen, now: Date())
+        }
+        _ = try? s.spin(by: .reagen, roll: 0.1, now: Date().addingTimeInterval(-120))
+        return s
+    }
+
+    #if DEBUG
+    /// Demo only: Reagen finishes another chore at 4s, then spins at 9s.
+    private func scheduleGameDemoEvents() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, var s = self.state, let b = s.blitz,
+                  let open = b.tasks.first(where: { $0.claimedBy == nil && $0.doneAt == nil }) else { return }
+            try? s.claim(taskID: open.id, by: .reagen)
+            try? s.markDone(taskID: open.id, by: .reagen, now: Date())
+            self.state = s
+            try? await Task.sleep(for: .seconds(5))
+            guard var s2 = self.state else { return }
+            _ = try? s2.spin(by: .reagen, roll: 0.5, now: Date())
+            self.state = s2
+        }
+    }
+    #endif
 
     private static func freshDemoState() -> HouseholdState {
         var s = HouseholdState.starter()

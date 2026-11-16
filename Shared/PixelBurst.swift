@@ -4,8 +4,8 @@ import SwiftUI
 struct PixelBurst: View {
     let origin: CGPoint
     let start: Date
-    var count = 36
-    var pixel: CGFloat = 10
+    var count = 64
+    var pixel: CGFloat = 16
     var colors: [Color] = [.yellow, .cyan, .mint, .pink, .orange, .white]
     var seed: UInt64 = 1
 

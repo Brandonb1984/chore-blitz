@@ -377,8 +377,9 @@ struct ArcadeBackground: View {
                     let px = (CGFloat.random(in: 0..<size.width, using: &rng) / 8).rounded() * 8
                     let py = (CGFloat.random(in: 0..<size.height, using: &rng) / 8).rounded() * 8
                     let on = (i + tick) % 5 != 0
-                    g.fill(Path(CGRect(x: px, y: py, width: 6, height: 6)),
-                           with: .color(.white.opacity(on ? 0.35 : 0.08)))
+                    // Dim enough to stay background even behind text and cards.
+                    g.fill(Path(CGRect(x: px, y: py, width: 5, height: 5)),
+                           with: .color(.white.opacity(on ? 0.16 : 0.05)))
                 }
             }
         }

@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 
 /// Tiny chiptune synth: square/triangle waves generated on the fly, so there
 /// are no audio files. Original melody and effects.
@@ -64,7 +65,17 @@ final class GameAudio {
         try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
         try? AVAudioSession.sharedInstance().setActive(true)
         #endif
-        do { try engine.start(); started = true } catch { started = false }
+        do {
+            try engine.start(); started = true
+            #if DEBUG
+            print("GameAudio: engine started")
+            #endif
+        } catch {
+            started = false
+            #if DEBUG
+            print("GameAudio: engine failed to start: \(error)")
+            #endif
+        }
     }
 
     private func note(_ midi: Int, _ seconds: Double, volume: Float = 0.12, square: Bool = true, delay: Double = 0) {

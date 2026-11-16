@@ -45,6 +45,10 @@ struct GameLayer: View {
                         .shadow(color: .orange, radius: 0, x: 8, y: 8)
                         .transition(.scale.combined(with: .opacity))
                 }
+                if reveal != nil {
+                    // Darken the board so the spin reads from across the room.
+                    Color.black.opacity(0.65).ignoresSafeArea().transition(.opacity)
+                }
                 if let reveal {
                     VStack(spacing: 30) {
                         Text("\(reveal.person.name.uppercased()) SPINS!")
@@ -60,7 +64,8 @@ struct GameLayer: View {
                         }
                     }
                     .padding(60)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.12, green: 0.04, blue: 0.22).opacity(0.95)))
+                    .frame(minHeight: 620)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.12, green: 0.04, blue: 0.22)))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.yellow, lineWidth: 6))
                     .transition(.scale)
                 }
@@ -86,8 +91,9 @@ struct GameLayer: View {
         let newlyDone = done.subtracting(oldDone)
         for (i, id) in newlyDone.enumerated() {
             let task = blitz?.tasks.first { $0.id == id }
-            let origin = CGPoint(x: size.width * CGFloat.random(in: 0.55...0.9),
-                                 y: size.height * CGFloat.random(in: 0.3...0.7))
+            // Burst over the Done column, where the finished chore lands.
+            let origin = CGPoint(x: size.width * CGFloat.random(in: 0.72...0.84),
+                                 y: size.height * CGFloat.random(in: 0.45...0.6))
             let label = "+\(max(task?.minutes ?? 1, 1)) XP"
             bursts.append(BurstEvent(origin: origin, start: Date().addingTimeInterval(Double(i) * 0.3),
                                      seed: UInt64.random(in: 1...UInt64.max), label: label))
@@ -143,9 +149,11 @@ struct FloatingLabel: View {
             let t = ctx.date.timeIntervalSince(start)
             if t >= 0 && t < 1.6 {
                 Text(text)
-                    .font(.system(size: 44, weight: .black, design: .monospaced))
+                    .font(.system(size: 64, weight: .black, design: .monospaced))
                     .foregroundStyle(.yellow)
-                    .shadow(color: .black, radius: 0, x: 4, y: 4)
+                    .shadow(color: .black, radius: 0, x: 5, y: 5)
+                    .padding(.horizontal, 16)
+                    .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
                     .opacity(1 - t / 1.6)
                     .position(x: origin.x, y: origin.y - CGFloat(t * 120))
             }

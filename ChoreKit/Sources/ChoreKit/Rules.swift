@@ -21,6 +21,13 @@ public extension HouseholdState {
         chores.removeAll { $0.id == id }
     }
 
+    /// Removes the built-in starter chores (matched by name), keeping the family's own.
+    mutating func removeStarterChores(by person: Person) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        let starterNames = Set(SeedChores.all.map(\.name))
+        chores.removeAll { starterNames.contains($0.name) }
+    }
+
     mutating func setShowTimes(_ show: Bool, by person: Person) throws {
         guard person.isParent else { throw ChoreError.parentsOnly }
         showTimes = show

@@ -234,4 +234,13 @@ final class RulesTests: XCTestCase {
         try s.setShowTimes(false, by: .kira)
         XCTAssertFalse(s.timesVisible)
     }
+
+    func testRemoveStarterChoresKeepsOwn() throws {
+        var s = HouseholdState.starter()
+        let mine = Chore(name: "Wipe the high chair", room: "Kitchen", minutes: 5, steps: ["Wipe tray"])
+        try s.addChore(mine, by: .kira)
+        XCTAssertThrowsError(try s.removeStarterChores(by: .reagen))
+        try s.removeStarterChores(by: .kira)
+        XCTAssertEqual(s.chores, [mine])
+    }
 }

@@ -9,6 +9,7 @@ struct ChoreLibraryView: View {
     @State private var editing: Chore?
     @State private var adding = false
     @State private var scanning = false
+    @State private var confirmingClear = false
 
     var chores: [Chore] { store.state?.chores ?? [] }
     var rooms: [String] { store.state?.rooms ?? [] }
@@ -70,11 +71,20 @@ struct ChoreLibraryView: View {
                                 get: { showTimes },
                                 set: { v in store.run { try $0.setShowTimes(v, by: me) } }))
                         }
+                        if me.isParent {
+                            Button("Remove the starter chores", role: .destructive) { confirmingClear = true }
+                        }
                         Button("Switch person") { meRaw = "" }
                     } label: { PersonBadge(person: me) }
                 }
             }
             .sheet(isPresented: $scanning) { RoomScanView(me: me) }
+            .confirmationDialog("Remove the 20 starter chores? Chores you added yourself stay.",
+                                isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Remove starter chores", role: .destructive) {
+                    store.run { try $0.removeStarterChores(by: me) }
+                }
+            }
             .sheet(isPresented: $adding) {
                 ChoreEditorView(title: "New chore", chore: Chore(name: "", room: rooms.first ?? "Kitchen", minutes: 10, steps: [""]),
                                 rooms: rooms) { new in

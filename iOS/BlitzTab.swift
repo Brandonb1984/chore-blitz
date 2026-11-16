@@ -46,7 +46,7 @@ struct IdleView: View {
                 }
                 if me.isParent {
                     Button(action: start) {
-                        Label("Start chores", systemImage: "play.fill")
+                        Label("Make today's list", systemImage: "plus")
                             .font(.title2.bold())
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)

@@ -243,4 +243,18 @@ final class RulesTests: XCTestCase {
         try s.removeStarterChores(by: .kira)
         XCTAssertEqual(s.chores, [mine])
     }
+
+    func testEditListAfterStart() throws {
+        var s = try running()
+        let fridge = Chore(name: "Clean the refrigerator", room: "Kitchen", minutes: 20, steps: ["Toss old food"])
+        XCTAssertThrowsError(try s.addTasks([fridge], by: .reagen))
+        try s.addTasks([fridge], by: .kira)
+        XCTAssertEqual(s.blitz?.tasks.last?.name, "Clean the refrigerator")
+        let id = s.blitz!.tasks.last!.id
+        try s.claim(taskID: id, by: .brandon)
+        XCTAssertEqual(s.blitz?.tasks.last?.claimedBy, .brandon)
+        XCTAssertThrowsError(try s.removeTask(taskID: id, by: .braden))
+        try s.removeTask(taskID: id, by: .kira)
+        XCTAssertEqual(s.blitz?.tasks.count, 2)
+    }
 }

@@ -77,6 +77,24 @@ public extension HouseholdState {
         blitz!.rewards![i].paidAt = now
     }
 
+    /// Parents add chores to a list that's already going.
+    mutating func addTasks(_ new: [Chore], by person: Person, assignedTo: Person? = nil) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        guard runningBlitz != nil else { throw ChoreError.noBlitz }
+        for chore in new {
+            var t = BlitzTask(from: chore)
+            if let who = assignedTo { t.assignedTo = who; t.claimedBy = who }
+            blitz!.tasks.append(t)
+        }
+    }
+
+    /// Parents take a chore off a list that's already going.
+    mutating func removeTask(taskID: UUID, by person: Person) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        guard runningBlitz != nil else { throw ChoreError.noBlitz }
+        blitz!.tasks.removeAll { $0.id == taskID }
+    }
+
     mutating func endBlitz(by person: Person, now: Date) throws {
         guard person.isParent else { throw ChoreError.parentsOnly }
         guard blitz != nil else { throw ChoreError.noBlitz }

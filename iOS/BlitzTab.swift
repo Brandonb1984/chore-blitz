@@ -6,6 +6,7 @@ struct BlitzTab: View {
     @EnvironmentObject var store: HouseholdStore
     var showTimes: Bool { store.showTimes }
     @State private var showingStart = false
+    @State private var editingList = false
 
     var body: some View {
         NavigationStack {
@@ -19,6 +20,9 @@ struct BlitzTab: View {
             .navigationTitle("Today")
             .toolbar {
                 if me.isParent, store.state?.runningBlitz != nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Edit list") { editingList = true }
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("End", role: .destructive) {
                             store.run { try $0.endBlitz(by: me, now: .now) }
@@ -27,6 +31,7 @@ struct BlitzTab: View {
                 }
             }
             .sheet(isPresented: $showingStart) { StartBlitzView(me: me) }
+            .sheet(isPresented: $editingList) { EditListView(me: me) }
         }
     }
 }

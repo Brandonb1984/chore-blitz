@@ -15,7 +15,9 @@ final class HouseholdStore: ObservableObject {
     /// Plain-English problem to show, or nil when everything's fine.
     @Published var problem: String?
 
-    private let db = CKContainer(identifier: HouseholdStore.containerID).publicCloudDatabase
+    /// Lazy so `-demo` runs never touch CloudKit (unsigned simulator builds
+    /// have no iCloud entitlement and CKContainer traps at init).
+    private lazy var db = CKContainer(identifier: HouseholdStore.containerID).publicCloudDatabase
     private let recordID = CKRecord.ID(recordName: "household-main")
     private let recordType = "Household"
     private let pollSeconds: Double

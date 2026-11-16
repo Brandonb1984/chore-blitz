@@ -80,7 +80,7 @@ struct SlotReels: View {
     func landed(_ reel: Int) -> Int {
         let lower = prizeName.lowercased()
         if lower.contains("jackpot") || lower.contains("20") { return 3 }
-        if lower.contains("$") { return 2 }
+        if lower.contains("$") || lower.contains("¢") || lower.contains("cent") { return 2 }
         return abs(prizeName.hashValue) % 2 == 0 ? 0 : 1
     }
 }

@@ -167,6 +167,7 @@ public struct Prize: Codable, Equatable, Identifiable, Sendable {
         return !(n.contains("nothing") || n.contains("try again"))
     }
 
+    /// Small bonuses (Brandon, Nov 2026): mostly 50¢, sometimes $1.
     public static let starterPot: [Prize] = [
         Prize(name: "50¢", weight: 60),
         Prize(name: "$1", weight: 40),

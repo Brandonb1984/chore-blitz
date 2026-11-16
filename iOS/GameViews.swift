@@ -212,8 +212,9 @@ struct WinningsSection: View {
 
     var body: some View {
         let unpaid = store.state?.unpaidSpins ?? []
+        let game = store.state?.isGameMode ?? false
         if !unpaid.isEmpty {
-            Section("Prize spins won") {
+            Section {
                 ForEach(unpaid) { spin in
                     HStack {
                         PersonBadge(person: spin.person)
@@ -228,6 +229,9 @@ struct WinningsSection: View {
                         }
                     }
                 }
+                .listRowBackground(game ? Color.white.opacity(0.09) : nil)
+            } header: {
+                if game { ArcadeHeader(text: "Loot won") } else { Text("Prize spins won") }
             }
         }
     }

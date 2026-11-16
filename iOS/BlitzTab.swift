@@ -111,6 +111,13 @@ struct RunningBlitzView: View {
     var showTimes: Bool { store.showTimes }
     @State private var selected: UUID?
     @AppStorage("seenHint") private var seenHint = false
+    @State private var bursts: [PhoneBurst] = []
+    @State private var knownLevel: Int?
+    @State private var knownMyDone: Set<UUID>?
+
+    /// Game mode turns the list into an arcade screen (see ArcadePhone.swift).
+    var game: Bool { store.state?.isGameMode ?? false }
+    var rowBackground: Color? { game ? Color.white.opacity(0.09) : nil }
 
     var mine: [BlitzTask] { blitz.tasks.filter { $0.claimedBy == me && $0.doneAt == nil } }
     var open: [BlitzTask] { blitz.tasks(in: .open) }
@@ -130,6 +137,13 @@ struct RunningBlitzView: View {
                             .buttonStyle(.borderless)
                     }
                 }
+            }
+            if game {
+                Section {
+                    XPBar(blitz: blitz, size: 18)
+                        .padding(.vertical, 4)
+                }
+                .listRowBackground(Color.clear)
             }
             Section {
                 if blitz.hasTimer {
@@ -156,25 +170,69 @@ struct RunningBlitzView: View {
                 }
                 SpinBanner(me: me)
             }
+            .listRowBackground(rowBackground)
             WinningsSection(me: me)
             if !mine.isEmpty {
-                Section("Your chores") {
-                    ForEach(mine) { row($0) }
-                }
+                Section {
+                    ForEach(mine) { row($0) }.listRowBackground(rowBackground)
+                } header: { header("Your chores", arcade: "Your quests") }
             }
-            Section(open.isEmpty ? "Nothing left to grab" : "Up for grabs") {
-                ForEach(open) { row($0) }
+            Section {
+                ForEach(open) { row($0) }.listRowBackground(rowBackground)
+            } header: {
+                header(open.isEmpty ? "Nothing left to grab" : "Up for grabs",
+                       arcade: open.isEmpty ? "All quests taken" : "Quests up for grabs")
             }
             if !others.isEmpty {
-                Section("Others are on it") { ForEach(others) { row($0) } }
+                Section {
+                    ForEach(others) { row($0) }.listRowBackground(rowBackground)
+                } header: { header("Others are on it", arcade: "Party members on it") }
             }
             if !done.isEmpty {
-                Section("Done") { ForEach(done) { row($0) } }
+                Section {
+                    ForEach(done) { row($0) }.listRowBackground(rowBackground)
+                } header: { header("Done", arcade: "Cleared") }
             }
+        }
+        .scrollContentBackground(game ? .hidden : .automatic)
+        .background { if game { ArcadePhoneBackground() } }
+        .preferredColorScheme(game ? .dark : nil)
+        .overlay { if game { PhoneBurstLayer(bursts: bursts) } }
+        .onChange(of: Set(blitz.tasks.filter { $0.doneAt != nil && $0.claimedBy == me }.map(\.id)), initial: true) { _, now in
+            // One of my chores just got finished (here or on its detail screen).
+            if game, let known = knownMyDone {
+                for id in now.subtracting(known) {
+                    let minutes = blitz.tasks.first { $0.id == id }?.minutes ?? 1
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    GameAudio.shared.kaching()
+                    GameAudio.shared.gem()
+                    celebrate("+\(max(minutes, 1)) XP")
+                }
+            }
+            knownMyDone = now
+        }
+        .onChange(of: level(forXP: familyXP(blitz)).level, initial: true) { _, lv in
+            // Level-up fanfare when the family XP bar fills.
+            if game, let known = knownLevel, lv > known {
+                GameAudio.shared.levelUp()
+                celebrate("LEVEL \(lv)!")
+            }
+            knownLevel = lv
         }
         .navigationDestination(item: $selected) { id in
             TaskDetailView(me: me, taskID: id)
         }
+    }
+
+    @ViewBuilder
+    func header(_ normal: String, arcade: String) -> some View {
+        if game { ArcadeHeader(text: arcade) } else { Text(normal) }
+    }
+
+    func celebrate(_ label: String) {
+        let b = PhoneBurst(label: label)
+        bursts.append(b)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { bursts.removeAll { $0.id == b.id } }
     }
 
     func row(_ task: BlitzTask) -> some View {
@@ -198,10 +256,6 @@ struct RunningBlitzView: View {
                     .buttonStyle(.borderedProminent)
             } else if task.column == .inProgress && (task.claimedBy == me || me.isParent) {
                 Button("Done") {
-                    if store.state?.isGameMode == true {
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        GameAudio.shared.kaching()
-                    }
                     store.run { try $0.markDone(taskID: task.id, by: me, now: .now) }
                 }
                     .buttonStyle(.borderedProminent)

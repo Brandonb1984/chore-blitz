@@ -61,7 +61,7 @@ struct RunningBoard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center) {
                 Text("Chore Blitz").font(.system(size: 56, weight: .heavy, design: .rounded))
                 Spacer()
                 Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
@@ -102,7 +102,7 @@ struct BoardColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
+            HStack(spacing: 12) {
                 Circle().fill(accent).frame(width: 18, height: 18)
                 Text(column.title).font(.title2.bold())
                 Text("\(tasks.count)").font(.title2).foregroundStyle(.secondary)
@@ -117,34 +117,45 @@ struct BoardColumn: View {
     }
 
     func cards(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? 8 : 14) {
+        VStack(alignment: .leading, spacing: compact ? 10 : 16) {
             ForEach(tasks) { task in
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .center, spacing: 18) {
+                    if let who = task.claimedBy {
+                        PersonBadge(person: who, size: compact ? 40 : 56)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(task.name)
-                            .font(compact ? .headline : .title3.weight(.semibold))
-                            .strikethrough(column == .done)
-                            .lineLimit(1)
+                            .font(compact ? .title3.weight(.semibold) : .title2.weight(.semibold))
+                            .foregroundStyle(column == .done ? Color.white.opacity(0.75) : Color.white)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                         if !compact {
-                            Text(task.room).font(.callout).foregroundStyle(.secondary)
+                            Text(subtitle(task))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
-                    Spacer(minLength: 8)
-                    if let who = task.claimedBy {
-                        HStack(spacing: 10) {
-                            PersonBadge(person: who, size: compact ? 32 : 44)
-                            if !compact { Text(who.name).font(.headline) }
-                        }
+                    Spacer(minLength: 0)
+                    if column == .done {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: compact ? 32 : 40))
+                            .foregroundStyle(.green)
                     }
                 }
-                .padding(compact ? 12 : 20)
-                .background(RoundedRectangle(cornerRadius: 18)
-                    .fill(Color.white.opacity(column == .done ? 0.05 : 0.10)))
-                .overlay(RoundedRectangle(cornerRadius: 18)
-                    .stroke(task.claimedBy?.color.opacity(column == .inProgress ? 0.9 : 0) ?? .clear, lineWidth: 3))
-                .opacity(column == .done ? 0.7 : 1)
+                .padding(compact ? 14 : 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.white.opacity(column == .done ? 0.06 : 0.11)))
+                .overlay(RoundedRectangle(cornerRadius: 20)
+                    .stroke(task.claimedBy?.color.opacity(column == .inProgress ? 0.9 : 0) ?? .clear, lineWidth: 4))
             }
         }
+    }
+
+    func subtitle(_ task: BlitzTask) -> String {
+        if let who = task.claimedBy { return "\(who.name) · \(task.room)" }
+        return task.room
     }
 }
 

@@ -156,6 +156,10 @@ struct RunningBlitzView: View {
             if task.column == .open {
                 Button("Claim") { store.run { try $0.claim(taskID: task.id, by: me) } }
                     .buttonStyle(.borderedProminent)
+            } else if task.column == .inProgress && task.claimedBy == me {
+                Button("Done") { store.run { try $0.markDone(taskID: task.id, by: me, now: .now) } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
             }
         }
     }

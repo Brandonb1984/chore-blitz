@@ -25,12 +25,14 @@ final class HouseholdStore: ObservableObject {
 
     /// Launch with `-demo` to use a local sample blitz instead of iCloud
     /// (for simulator screenshots).
-    private let demo = ProcessInfo.processInfo.arguments.contains("-demo")
+    /// `-demoFresh`: a just-started 12-chore blitz with nothing claimed.
+    private let demoFresh = ProcessInfo.processInfo.arguments.contains("-demoFresh")
+    private var demo: Bool { demoFresh || ProcessInfo.processInfo.arguments.contains("-demo") }
 
     init(pollSeconds: Double) {
         self.pollSeconds = pollSeconds
         if demo {
-            state = Self.demoState()
+            state = demoFresh ? Self.freshDemoState() : Self.demoState()
             isLoading = false
         }
     }
@@ -128,6 +130,13 @@ final class HouseholdStore: ObservableObject {
         try? s.markDone(taskID: t[1], by: .braden, now: now)
         try? s.markDone(taskID: t[4], by: .reagen, now: now)
         try? s.markDone(taskID: t[8], by: .brandon, now: now)
+        return s
+    }
+
+    private static func freshDemoState() -> HouseholdState {
+        var s = HouseholdState.starter()
+        let ids = s.chores.prefix(12).map(\.id)
+        try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: 45, now: Date().addingTimeInterval(-60))
         return s
     }
 

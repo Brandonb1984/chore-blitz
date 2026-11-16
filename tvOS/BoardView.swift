@@ -12,7 +12,8 @@ struct BoardView: View {
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
             content
-                .padding(60)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
         }
         .preferredColorScheme(.dark)
         .onChange(of: store.state?.runningBlitz != nil, initial: true) { _, running in
@@ -78,13 +79,32 @@ struct RunningBoard: View {
             ProgressView(value: Double(blitz.tasks(in: .done).count), total: Double(max(blitz.tasks.count, 1)))
                 .tint(.green)
                 .scaleEffect(x: 1, y: 3, anchor: .center)
-            HStack(alignment: .top, spacing: 40) {
-                ForEach(TaskColumn.allCases, id: \.self) { col in
-                    BoardColumn(column: col, tasks: blitz.tasks(in: col))
+            GeometryReader { geo in
+                let widths = columnWidths(total: geo.size.width)
+                HStack(alignment: .top, spacing: Self.columnSpacing) {
+                    ForEach(Array(TaskColumn.allCases.enumerated()), id: \.element) { i, col in
+                        BoardColumn(column: col, tasks: blitz.tasks(in: col))
+                            .frame(width: widths[i])
+                    }
                 }
+                .frame(height: geo.size.height, alignment: .top)
+                .animation(.easeInOut(duration: 0.4), value: widths)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    static let columnSpacing: CGFloat = 40
+
+    /// Every column gets a minimum width; the rest is shared by how many
+    /// chores each holds, so a fresh blitz's long Open column gets room.
+    func columnWidths(total: CGFloat) -> [CGFloat] {
+        let counts = TaskColumn.allCases.map { CGFloat(blitz.tasks(in: $0).count) }
+        let usable = total - Self.columnSpacing * CGFloat(counts.count - 1)
+        let base = min(400, usable / CGFloat(counts.count))
+        let extra = usable - base * CGFloat(counts.count)
+        let sum = counts.reduce(0, +)
+        return counts.map { base + (sum > 0 ? extra * $0 / sum : extra / CGFloat(counts.count)) }
     }
 }
 
@@ -107,31 +127,40 @@ struct BoardColumn: View {
                 Text(column.title).font(.title2.bold())
                 Text("\(tasks.count)").font(.title2).foregroundStyle(.secondary)
             }
-            // Shrink cards if a column gets long so everything still fits.
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            // Use the roomiest card size that fits the column's real height;
+            // long columns (a fresh blitz) fall back to single-line rows that
+            // are sized to always fit.
             ViewThatFits(in: .vertical) {
-                cards(compact: false)
-                cards(compact: true)
+                cards(.full)
+                cards(.compact)
+                TightCards(column: column, tasks: tasks)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    func cards(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? 10 : 16) {
+    enum Density { case full, compact }
+
+    func cards(_ density: Density) -> some View {
+        let full = density == .full
+        return VStack(alignment: .leading, spacing: full ? 14 : 10) {
             ForEach(tasks) { task in
                 HStack(alignment: .center, spacing: 18) {
                     if let who = task.claimedBy {
-                        PersonBadge(person: who, size: compact ? 40 : 56)
+                        PersonBadge(person: who, size: full ? 56 : 44)
                     }
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(task.name)
-                            .font(compact ? .title3.weight(.semibold) : .title2.weight(.semibold))
+                            .font(full ? .title2.weight(.semibold) : .title3.weight(.semibold))
                             .foregroundStyle(column == .done ? Color.white.opacity(0.75) : Color.white)
                             .lineLimit(2)
                             .minimumScaleFactor(0.8)
                             .fixedSize(horizontal: false, vertical: true)
-                        if !compact {
-                            Text(subtitle(task))
+                        if full {
+                            Text(BoardColumn.subtitle(task))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -140,23 +169,87 @@ struct BoardColumn: View {
                     Spacer(minLength: 0)
                     if column == .done {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: compact ? 32 : 40))
+                            .font(.system(size: full ? 40 : 34))
                             .foregroundStyle(.green)
                     }
                 }
-                .padding(compact ? 14 : 18)
+                .padding(.horizontal, full ? 20 : 16)
+                .padding(.vertical, full ? 16 : 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(column == .done ? 0.06 : 0.11)))
-                .overlay(RoundedRectangle(cornerRadius: 20)
-                    .stroke(task.claimedBy?.color.opacity(column == .inProgress ? 0.9 : 0) ?? .clear, lineWidth: 4))
+                .modifier(CardBackground(column: column, task: task))
             }
         }
     }
 
-    func subtitle(_ task: BlitzTask) -> String {
+    static func subtitle(_ task: BlitzTask) -> String {
         if let who = task.claimedBy { return "\(who.name) · \(task.room)" }
         return task.room
+    }
+}
+
+/// Rows sized from the space available so a long column is never cut off.
+/// When the column is wide enough it splits into two sub-columns.
+struct TightCards: View {
+    let column: TaskColumn
+    let tasks: [BlitzTask]
+
+    var body: some View {
+        GeometryReader { geo in
+            let spacing: CGFloat = 10
+            let split = tasks.count > 5 && geo.size.width >= 760
+            let perCol = split ? (tasks.count + 1) / 2 : max(tasks.count, 1)
+            let rows = CGFloat(perCol)
+            let row = min(110, max(36, (geo.size.height - spacing * (rows - 1)) / rows))
+            let font = min(38, max(22, row * 0.36))
+            let twoLines = row >= font * 2.5
+            let halves = split ? [Array(tasks.prefix(perCol)), Array(tasks.dropFirst(perCol))] : [tasks]
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(halves.indices, id: \.self) { h in
+                    VStack(alignment: .leading, spacing: spacing) {
+                        ForEach(halves[h]) { task in
+                            card(task, height: row, font: font, lines: twoLines ? 2 : 1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                }
+            }
+        }
+    }
+
+    func card(_ task: BlitzTask, height: CGFloat, font: CGFloat, lines: Int) -> some View {
+        HStack(spacing: 14) {
+            if let who = task.claimedBy {
+                PersonBadge(person: who, size: min(56, font * 1.3))
+            }
+            Text(task.name)
+                .font(.system(size: font, weight: .semibold))
+                .foregroundStyle(column == .done ? Color.white.opacity(0.75) : Color.white)
+                .lineLimit(lines)
+                .minimumScaleFactor(0.7)
+            Spacer(minLength: 0)
+            if column == .done {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: font))
+                    .foregroundStyle(.green)
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .leading)
+        .modifier(CardBackground(column: column, task: task, corner: 16))
+    }
+}
+
+struct CardBackground: ViewModifier {
+    let column: TaskColumn
+    let task: BlitzTask
+    var corner: CGFloat = 20
+
+    func body(content: Content) -> some View {
+        content
+            .background(RoundedRectangle(cornerRadius: corner)
+                .fill(Color.white.opacity(column == .done ? 0.06 : 0.11)))
+            .overlay(RoundedRectangle(cornerRadius: corner)
+                .stroke(task.claimedBy?.color.opacity(column == .inProgress ? 0.9 : 0) ?? .clear, lineWidth: 4))
     }
 }
 

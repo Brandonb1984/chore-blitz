@@ -75,7 +75,10 @@ enum RoomScanner {
             .map { $0.identifier.replacingOccurrences(of: "_", with: " ") }
     }
 
-    static func suggest(room: String, labels: [String], existing: [String]) async throws -> [ChoreIdea] {
+    /// On iOS 27+ the on-device model looks at the photo itself (Vision labels
+    /// ride along as hints). On iOS 26 it only gets the Vision labels.
+    /// Everything runs on the phone; no cloud model is used.
+    static func suggest(room: String, image: UIImage?, labels: [String], existing: [String]) async throws -> [ChoreIdea] {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             let session = LanguageModelSession(instructions: """
@@ -84,16 +87,33 @@ enum RoomScanner {
                 Suggest only chores that make sense for the room and the things seen in the photo. \
                 Don't suggest chores that are already on their list.
                 """)
-            let prompt = """
-                Room: \(room)
-                Things seen in the photo: \(labels.isEmpty ? "nothing clear" : labels.joined(separator: ", "))
-                Chores already on our list: \(existing.joined(separator: "; "))
-                Suggest cleaning chores for this area.
-                """
-            let response = try await session.respond(to: prompt, generating: GeneratedChoreList.self)
-            return response.content.chores.map {
-                ChoreIdea(name: $0.name, minutes: $0.minutes, steps: $0.steps)
+            let hints = labels.isEmpty ? "nothing clear" : labels.joined(separator: ", ")
+            let skip = existing.joined(separator: "; ")
+            let chores: [GeneratedChore]
+            if #available(iOS 27.0, *), let cg = image?.cgImage,
+               SystemLanguageModel.default.capabilities.contains(.vision) {
+                let response = try await session.respond(generating: GeneratedChoreList.self) {
+                    Attachment(cg, orientation: CGImagePropertyOrientation(image!.imageOrientation))
+                    """
+                    This is a photo of our \(room.lowercased()). Look at what is actually messy, dirty or out of place in it.
+                    Suggest only the 2 to 4 chores that would make the biggest difference to the mess you can see, most important first. \
+                    Fewer is better. Each chore should be something a normal family does when cleaning (no sorting by color, no inspecting). \
+                    In the steps, name the actual things in the photo (for example "Hang the jackets on hooks", not "Organize items").
+                    Rough hints from a labeler, which may be wrong: \(hints).
+                    Chores already on our list (skip these): \(skip).
+                    """
+                }
+                chores = response.content.chores
+            } else {
+                let prompt = """
+                    Room: \(room)
+                    Things seen in the photo: \(hints)
+                    Chores already on our list: \(skip)
+                    Suggest the 2 to 4 cleaning chores that matter most for this area. Fewer is better.
+                    """
+                chores = try await session.respond(to: prompt, generating: GeneratedChoreList.self).content.chores
             }
+            return chores.map { ChoreIdea(name: $0.name, minutes: $0.minutes, steps: $0.steps) }
         }
         #endif
         throw ScanError.unavailable
@@ -276,7 +296,7 @@ struct RoomScanView: View {
         do {
             seen = try await RoomScanner.labels(for: image)
             let existing = (store.state?.chores ?? []).filter { $0.room == room }.map(\.name)
-            ideas = try await RoomScanner.suggest(room: room, labels: seen, existing: existing)
+            ideas = try await RoomScanner.suggest(room: room, image: image, labels: seen, existing: existing)
             chosen = Set(ideas.map(\.id))
             if ideas.isEmpty { problem = "No suggestions this time. Try another angle." }
         } catch {

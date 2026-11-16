@@ -4,6 +4,7 @@ import SwiftUI
 struct ChoreLibraryView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @AppStorage("me") private var meRaw = ""
     @State private var editing: Chore?
     @State private var adding = false
@@ -33,7 +34,9 @@ struct ChoreLibraryView: View {
                                 HStack {
                                     Text(chore.name)
                                     Spacer()
-                                    Text("\(chore.minutes) min").foregroundStyle(.secondary)
+                                    if showTimes {
+                                        Text("\(chore.minutes) min").foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                             .swipeActions {
@@ -52,6 +55,11 @@ struct ChoreLibraryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Text("Using as \(me.name)")
+                        if me.isParent {
+                            Toggle("Show chore times", isOn: Binding(
+                                get: { showTimes },
+                                set: { v in store.run { try $0.setShowTimes(v, by: me) } }))
+                        }
                         Button("Switch person") { meRaw = "" }
                     } label: { PersonBadge(person: me) }
                 }
@@ -70,13 +78,17 @@ struct ChoreDetailView: View {
     let me: Person
     let chore: Chore
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @State private var editing = false
 
     var current: Chore { store.state?.chores.first { $0.id == chore.id } ?? chore }
 
     var body: some View {
         List {
-            Section { Text("\(current.room) · about \(current.minutes) min").foregroundStyle(.secondary) }
+            Section {
+                Text(showTimes ? "\(current.room) · about \(current.minutes) min" : current.room)
+                    .foregroundStyle(.secondary)
+            }
             Section("How to do it") {
                 ForEach(Array(current.steps.enumerated()), id: \.offset) { i, step in
                     HStack(alignment: .top, spacing: 12) {

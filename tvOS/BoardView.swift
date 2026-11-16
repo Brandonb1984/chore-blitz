@@ -68,17 +68,24 @@ struct RunningBoard: View {
                 Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
                     .font(.title2).foregroundStyle(.secondary)
                     .padding(.trailing, 40)
-                TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    let left = blitz.remaining(at: ctx.date)
-                    Text(countdownText(left))
-                        .font(.system(size: 110, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(left > 0 ? (left < 300 ? Color.yellow : Color.white) : Color.red)
+                if blitz.hasTimer {
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        let left = blitz.remaining(at: ctx.date) ?? 0
+                        Text(countdownText(left))
+                            .font(.system(size: 110, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(left > 0 ? (left < 300 ? Color.yellow : Color.white) : Color.red)
+                    }
                 }
             }
             ProgressView(value: Double(blitz.tasks(in: .done).count), total: Double(max(blitz.tasks.count, 1)))
                 .tint(.green)
                 .scaleEffect(x: 1, y: 3, anchor: .center)
+            if !blitz.allRewards.isEmpty {
+                HStack(spacing: 24) {
+                    ForEach(blitz.allRewards, id: \.person) { RewardPill(blitz: blitz, reward: $0) }
+                }
+            }
             GeometryReader { geo in
                 let widths = columnWidths(total: geo.size.width)
                 HStack(alignment: .top, spacing: Self.columnSpacing) {
@@ -258,10 +265,15 @@ struct FinishedBoard: View {
 
     var body: some View {
         VStack(spacing: 40) {
-            Text(blitz.tasks.allSatisfy { $0.doneAt != nil } ? "All done! 🎉" : "Blitz over")
+            Text(blitz.tasks.allSatisfy { $0.doneAt != nil } ? "All done! 🎉" : "That's a wrap")
                 .font(.system(size: 100, weight: .heavy, design: .rounded))
             Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) chores done")
                 .font(.title).foregroundStyle(.secondary)
+            if !blitz.allRewards.isEmpty {
+                HStack(spacing: 24) {
+                    ForEach(blitz.allRewards, id: \.person) { RewardPill(blitz: blitz, reward: $0) }
+                }
+            }
             HStack(alignment: .top, spacing: 40) {
                 ForEach(blitz.doneByPerson, id: \.person) { entry in
                     VStack(spacing: 16) {
@@ -275,5 +287,33 @@ struct FinishedBoard: View {
                 }
             }
         }
+    }
+}
+
+/// "Reagen · 2 of 4 → $20", or "Reagen earned $20!" once his assigned chores are done.
+struct RewardPill: View {
+    let blitz: Blitz
+    let reward: Reward
+
+    var body: some View {
+        let mine = blitz.assignedTasks(for: reward.person)
+        let done = mine.filter { $0.doneAt != nil }.count
+        let earned = blitz.hasEarned(reward)
+        HStack(spacing: 14) {
+            PersonBadge(person: reward.person, size: 44)
+            if earned {
+                Text("\(reward.person.name) earned \(reward.prize)!")
+                    .font(.title3.bold())
+                Image(systemName: reward.paidAt != nil ? "checkmark.seal.fill" : "star.fill")
+                    .foregroundStyle(.yellow)
+            } else {
+                Text("\(reward.person.name) · \(done) of \(mine.count) → \(reward.prize)")
+                    .font(.title3.weight(.semibold))
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 10)
+        .background(Capsule().fill(earned ? Color.yellow.opacity(0.25) : Color.white.opacity(0.10)))
+        .overlay(Capsule().stroke(reward.person.color.opacity(0.8), lineWidth: 3))
     }
 }

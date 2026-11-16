@@ -36,6 +36,15 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(s.blitz?.tasks(in: .open).count, 2)
     }
 
+    func testNoTimerByDefaultOption() throws {
+        var s = HouseholdState(chores: [dishes])
+        try s.startBlitz(by: .kira, choreIDs: [dishes.id], minutes: nil, now: t0)
+        XCTAssertNil(s.blitz?.endsAt)
+        XCTAssertNil(s.blitz?.remaining(at: t0))
+        XCTAssertEqual(s.blitz?.hasTimer, false)
+        XCTAssertNotNil(s.runningBlitz, "without a timer it runs until done or ended")
+    }
+
     func testStartBlitzRules() throws {
         var s = HouseholdState(chores: [dishes])
         XCTAssertThrowsError(try s.startBlitz(by: .braden, choreIDs: [dishes.id], minutes: 30, now: t0))
@@ -144,5 +153,85 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(countdownText(0), "+0:00")
         XCTAssertEqual(countdownText(-90), "+1:30")
         XCTAssertEqual(countdownText(-3725), "+62:05")
+    }
+
+    // MARK: Rewards
+
+    func rewardBlitz() throws -> HouseholdState {
+        var s = HouseholdState(chores: [dishes, trash])
+        try s.startBlitz(by: .brandon, choreIDs: [dishes.id, trash.id], minutes: 45, now: t0,
+                         assignments: [dishes.id: .reagen, trash.id: .reagen], prizes: [.reagen: " $20 "])
+        return s
+    }
+
+    func testAssignedChoresStartClaimedWithReward() throws {
+        let s = try rewardBlitz()
+        let b = s.blitz!
+        XCTAssertEqual(b.tasks.map(\.claimedBy), [.reagen, .reagen])
+        XCTAssertEqual(b.assignedTasks(for: .reagen).count, 2)
+        XCTAssertEqual(b.reward(for: .reagen)?.prize, "$20")
+        XCTAssertFalse(b.hasEarned(b.reward(for: .reagen)!))
+    }
+
+    func testPrizeWithoutAssignedChoresIsDropped() throws {
+        var s = HouseholdState(chores: [dishes])
+        try s.startBlitz(by: .kira, choreIDs: [dishes.id], minutes: 30, now: t0, prizes: [.braden: "$20"])
+        XCTAssertNil(s.blitz?.reward(for: .braden))
+    }
+
+    func testEarnedWhenAllAssignedDoneEvenPastTimer() throws {
+        var s = try rewardBlitz()
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[0], by: .reagen, now: t0)
+        XCTAssertFalse(s.blitz!.hasEarned(s.blitz!.reward(for: .reagen)!))
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0.addingTimeInterval(3 * 3600))
+        XCTAssertTrue(s.blitz!.hasEarned(s.blitz!.reward(for: .reagen)!))
+    }
+
+    func testOnlyAssignedChoresCount() throws {
+        var s = HouseholdState(chores: [dishes, trash])
+        try s.startBlitz(by: .brandon, choreIDs: [dishes.id, trash.id], minutes: 30, now: t0,
+                         assignments: [dishes.id: .reagen], prizes: [.reagen: "$20"])
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0) // an extra chore he grabbed
+        XCTAssertFalse(s.blitz!.hasEarned(s.blitz!.reward(for: .reagen)!))
+    }
+
+    func testCantGiveBackAssignedChore() throws {
+        var s = try rewardBlitz()
+        let id = s.blitz!.tasks[0].id
+        XCTAssertThrowsError(try s.unclaim(taskID: id, by: .reagen)) {
+            XCTAssertEqual($0 as? ChoreError, .assignedChore)
+        }
+        try s.unclaim(taskID: id, by: .kira)
+        XCTAssertNil(s.blitz?.tasks[0].assignedTo)
+    }
+
+    func testMarkRewardPaid() throws {
+        var s = try rewardBlitz()
+        XCTAssertThrowsError(try s.markRewardPaid(for: .reagen, by: .brandon, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .rewardNotEarned)
+        }
+        for id in s.blitz!.tasks.map(\.id) { try s.markDone(taskID: id, by: .reagen, now: t0) }
+        XCTAssertThrowsError(try s.markRewardPaid(for: .reagen, by: .reagen, now: t0))
+        try s.markRewardPaid(for: .reagen, by: .brandon, now: t0)
+        XCTAssertEqual(s.blitz?.reward(for: .reagen)?.paidAt, t0)
+    }
+
+    func testOldSavedStateWithoutRewardsStillLoads() throws {
+        var s = try running()
+        s.blitz?.rewards = nil
+        var json = String(data: try JSONEncoder().encode(s), encoding: .utf8)!
+        json = json.replacingOccurrences(of: ",\"rewards\":null", with: "")
+        let back = try JSONDecoder().decode(HouseholdState.self, from: Data(json.utf8))
+        XCTAssertEqual(back.blitz?.allRewards, [])
+    }
+
+    func testShowTimesToggle() throws {
+        var s = HouseholdState(chores: [])
+        XCTAssertTrue(s.timesVisible)
+        XCTAssertThrowsError(try s.setShowTimes(false, by: .reagen))
+        try s.setShowTimes(false, by: .kira)
+        XCTAssertFalse(s.timesVisible)
     }
 }

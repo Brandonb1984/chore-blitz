@@ -27,3 +27,4 @@ struct PersonBadge: View {
             .accessibilityLabel(person.name)
     }
 }
+

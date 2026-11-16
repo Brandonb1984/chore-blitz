@@ -4,6 +4,7 @@ import SwiftUI
 struct BlitzTab: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @State private var showingStart = false
 
     var body: some View {
@@ -15,11 +16,11 @@ struct BlitzTab: View {
                     IdleView(me: me, lastBlitz: store.state?.blitz) { showingStart = true }
                 }
             }
-            .navigationTitle("Chore Blitz")
+            .navigationTitle("Chores")
             .toolbar {
                 if me.isParent, store.state?.runningBlitz != nil {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("End blitz", role: .destructive) {
+                        Button("End", role: .destructive) {
                             store.run { try $0.endBlitz(by: me, now: .now) }
                         }
                     }
@@ -35,16 +36,17 @@ struct IdleView: View {
     let lastBlitz: Blitz?
     let start: () -> Void
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 if let last = lastBlitz, last.isOver {
-                    FinishedCard(blitz: last)
+                    FinishedCard(me: me, blitz: last)
                 }
                 if me.isParent {
                     Button(action: start) {
-                        Label("Start a blitz", systemImage: "play.fill")
+                        Label("Start chores", systemImage: "play.fill")
                             .font(.title2.bold())
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
@@ -57,8 +59,8 @@ struct IdleView: View {
                 } else {
                     VStack(spacing: 8) {
                         Image(systemName: "cup.and.saucer").font(.system(size: 44))
-                        Text("No blitz right now").font(.title3.bold())
-                        Text("When Brandon or Kira starts one, your chores show up here.")
+                        Text("No chores going right now").font(.title3.bold())
+                        Text("When Brandon or Kira starts some, they show up here.")
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                     }
@@ -71,12 +73,16 @@ struct IdleView: View {
 }
 
 struct FinishedCard: View {
+    let me: Person
     let blitz: Blitz
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Last blitz: \(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
+            Text("Last time: \(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
                 .font(.headline)
+            ForEach(blitz.allRewards, id: \.person) { reward in
+                RewardRow(me: me, blitz: blitz, reward: reward)
+            }
             ForEach(blitz.doneByPerson, id: \.person) { entry in
                 HStack(alignment: .top) {
                     PersonBadge(person: entry.person)
@@ -95,6 +101,7 @@ struct RunningBlitzView: View {
     let me: Person
     let blitz: Blitz
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @State private var selected: UUID?
 
     var mine: [BlitzTask] { blitz.tasks.filter { $0.claimedBy == me && $0.doneAt == nil } }
@@ -105,17 +112,27 @@ struct RunningBlitzView: View {
     var body: some View {
         List {
             Section {
-                TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    let left = blitz.remaining(at: ctx.date)
-                    HStack {
-                        Text(countdownText(left))
-                            .font(.system(size: 44, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(left > 0 ? Color.primary : Color.red)
-                        Spacer()
-                        Text("\(done.count) of \(blitz.tasks.count) done")
-                            .foregroundStyle(.secondary)
+                if blitz.hasTimer {
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        let left = blitz.remaining(at: ctx.date) ?? 0
+                        HStack {
+                            Text(countdownText(left))
+                                .font(.system(size: 44, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(left > 0 ? Color.primary : Color.red)
+                            Spacer()
+                            Text("\(done.count) of \(blitz.tasks.count) done")
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                } else {
+                    HStack {
+                        Text("\(done.count) of \(blitz.tasks.count) done").font(.title2.bold())
+                        Spacer()
+                    }
+                }
+                ForEach(blitz.allRewards, id: \.person) { reward in
+                    RewardRow(me: me, blitz: blitz, reward: reward)
                 }
             }
             if !mine.isEmpty {
@@ -144,7 +161,8 @@ struct RunningBlitzView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(task.name).strikethrough(task.doneAt != nil)
-                        Text("\(task.room) · \(task.minutes) min").font(.caption).foregroundStyle(.secondary)
+                        Text(showTimes ? "\(task.room) · \(task.minutes) min" : task.room)
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     if let who = task.claimedBy { PersonBadge(person: who) }
@@ -170,6 +188,7 @@ struct TaskDetailView: View {
     let me: Person
     let taskID: UUID
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @State private var checked: Set<Int> = []
 
     var task: BlitzTask? { store.state?.blitz?.tasks.first { $0.id == taskID } }
@@ -179,7 +198,8 @@ struct TaskDetailView: View {
             List {
                 Section {
                     HStack {
-                        Text("\(task.room) · about \(task.minutes) min").foregroundStyle(.secondary)
+                        Text(showTimes ? "\(task.room) · about \(task.minutes) min" : task.room)
+                            .foregroundStyle(.secondary)
                         Spacer()
                         if let who = task.claimedBy {
                             PersonBadge(person: who)
@@ -233,5 +253,46 @@ struct TaskDetailView: View {
                 Button("Not done yet") { store.run { try $0.markNotDone(taskID: taskID, by: me) } }
             }
         }
+    }
+}
+
+/// Shows a reward's progress. Parents get "Mark paid" once it's earned.
+struct RewardRow: View {
+    let me: Person
+    let blitz: Blitz
+    let reward: Reward
+    @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
+
+    var body: some View {
+        let mine = blitz.assignedTasks(for: reward.person)
+        let done = mine.filter { $0.doneAt != nil }.count
+        let earned = blitz.hasEarned(reward)
+        let who = reward.person == me ? "You" : reward.person.name
+        HStack(spacing: 12) {
+            PersonBadge(person: reward.person)
+            VStack(alignment: .leading, spacing: 2) {
+                if earned {
+                    Text(reward.paidAt != nil ? "\(who) earned \(reward.prize) · paid" : "\(who) earned \(reward.prize)!")
+                        .font(.headline)
+                } else {
+                    Text(reward.person == me
+                         ? "Finish your \(mine.count) chores to earn \(reward.prize)"
+                         : "\(reward.person.name): finish \(mine.count) chores for \(reward.prize)")
+                        .font(.headline)
+                    ProgressView(value: Double(done), total: Double(max(mine.count, 1)))
+                        .tint(reward.person.color)
+                }
+            }
+            Spacer()
+            if earned && reward.paidAt == nil && me.isParent {
+                Button("Mark paid") {
+                    store.run { try $0.markRewardPaid(for: reward.person, by: me, now: .now) }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

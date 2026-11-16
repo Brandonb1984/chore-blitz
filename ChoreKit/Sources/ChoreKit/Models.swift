@@ -48,6 +48,8 @@ public struct BlitzTask: Codable, Identifiable, Equatable, Sendable {
     public var steps: [String]
     public var claimedBy: Person?
     public var doneAt: Date?
+    /// Set when a parent assigned this chore as part of someone's reward.
+    public var assignedTo: Person?
 
     public init(from chore: Chore) {
         id = UUID()
@@ -58,6 +60,7 @@ public struct BlitzTask: Codable, Identifiable, Equatable, Sendable {
         steps = chore.steps
         claimedBy = nil
         doneAt = nil
+        assignedTo = nil
     }
 
     public var column: TaskColumn {
@@ -71,17 +74,39 @@ public struct Blitz: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     public var startedBy: Person
     public var startedAt: Date
-    public var endsAt: Date
+    /// Nil when there's no timer. Blitz mode is optional.
+    public var endsAt: Date?
     public var endedAt: Date?
     public var tasks: [BlitzTask]
+    /// Optional so older saved blitzes (before rewards existed) still load.
+    public var rewards: [Reward]?
 
-    public init(id: UUID = UUID(), startedBy: Person, startedAt: Date, endsAt: Date, tasks: [BlitzTask]) {
+    public init(id: UUID = UUID(), startedBy: Person, startedAt: Date, endsAt: Date?,
+                tasks: [BlitzTask], rewards: [Reward] = []) {
         self.id = id
         self.startedBy = startedBy
         self.startedAt = startedAt
         self.endsAt = endsAt
         self.endedAt = nil
         self.tasks = tasks
+        self.rewards = rewards.isEmpty ? nil : rewards
+    }
+
+    public var allRewards: [Reward] { rewards ?? [] }
+
+    public func reward(for person: Person) -> Reward? {
+        allRewards.first { $0.person == person }
+    }
+
+    /// The chores a parent assigned to this person.
+    public func assignedTasks(for person: Person) -> [BlitzTask] {
+        tasks.filter { $0.assignedTo == person }
+    }
+
+    /// Earned once every assigned chore is done. No timer cutoff.
+    public func hasEarned(_ reward: Reward) -> Bool {
+        let mine = assignedTasks(for: reward.person)
+        return !mine.isEmpty && mine.allSatisfy { $0.doneAt != nil }
     }
 
     /// Over when a parent ended it or every chore is done. Running past the
@@ -94,9 +119,12 @@ public struct Blitz: Codable, Identifiable, Equatable, Sendable {
         tasks.filter { $0.column == column }
     }
 
-    public func remaining(at now: Date) -> TimeInterval {
-        endsAt.timeIntervalSince(now)
+    /// Time left on the blitz timer, or nil when there's no timer.
+    public func remaining(at now: Date) -> TimeInterval? {
+        endsAt?.timeIntervalSince(now)
     }
+
+    public var hasTimer: Bool { endsAt != nil }
 
     /// Finished chores per person, in family order, skipping people with none.
     public var doneByPerson: [PersonDone] {
@@ -104,6 +132,20 @@ public struct Blitz: Codable, Identifiable, Equatable, Sendable {
             let mine = tasks.filter { $0.doneAt != nil && $0.claimedBy == p }
             return mine.isEmpty ? nil : PersonDone(person: p, tasks: mine)
         }
+    }
+}
+
+/// "Finish your assigned chores and earn $20."
+public struct Reward: Codable, Equatable, Sendable {
+    public var person: Person
+    /// Free text so it can be "$20", "pick dinner", etc.
+    public var prize: String
+    public var paidAt: Date?
+
+    public init(person: Person, prize: String, paidAt: Date? = nil) {
+        self.person = person
+        self.prize = prize
+        self.paidAt = paidAt
     }
 }
 
@@ -115,6 +157,11 @@ public struct PersonDone: Equatable, Sendable {
 public struct HouseholdState: Codable, Equatable, Sendable {
     public var chores: [Chore]
     public var blitz: Blitz?
+    /// Parents can hide chore minutes everywhere. Optional so older saved
+    /// state still loads; nil means shown.
+    public var showTimes: Bool?
+
+    public var timesVisible: Bool { showTimes ?? true }
 
     public init(chores: [Chore], blitz: Blitz? = nil) {
         self.chores = chores
@@ -145,6 +192,8 @@ public enum ChoreError: Error, Equatable, LocalizedError {
     case choreNotFound
     case alreadyClaimed(Person)
     case notYourTask(Person)
+    case assignedChore
+    case rewardNotEarned
 
     public var errorDescription: String? {
         switch self {
@@ -156,6 +205,8 @@ public enum ChoreError: Error, Equatable, LocalizedError {
         case .choreNotFound: return "That chore was deleted."
         case .alreadyClaimed(let p): return "\(p.name) already has this one."
         case .notYourTask(let p): return "That's \(p.name)'s chore."
+        case .assignedChore: return "This one was assigned to you. Ask Brandon or Kira to swap it."
+        case .rewardNotEarned: return "Not earned yet. Some assigned chores aren't done."
         }
     }
 }

@@ -122,7 +122,11 @@ final class HouseholdStore: ObservableObject {
         var s = HouseholdState.starter()
         let ids = s.chores.prefix(9).map(\.id)
         let now = Date()
-        try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: 30, now: now.addingTimeInterval(-11 * 60))
+        // No timer (the default), with Reagen assigned 2 chores for $20.
+        let noTimer = ProcessInfo.processInfo.arguments.contains("-demoNoTimer")
+        try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: noTimer ? nil : 30,
+                          now: now.addingTimeInterval(-11 * 60),
+                          assignments: [ids[2]: .reagen, ids[4]: .reagen], prizes: [.reagen: "$20"])
         let t = s.blitz!.tasks.map(\.id)
         try? s.claim(taskID: t[0], by: .braden)
         try? s.claim(taskID: t[2], by: .reagen)
@@ -139,6 +143,9 @@ final class HouseholdStore: ObservableObject {
         try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: 45, now: Date().addingTimeInterval(-60))
         return s
     }
+
+    /// Whether chore minutes should be shown (a parent can turn this off).
+    var showTimes: Bool { state?.timesVisible ?? true }
 
     // MARK: Encoding
 

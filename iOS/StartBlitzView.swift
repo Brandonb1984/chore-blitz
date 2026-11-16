@@ -1,13 +1,18 @@
 import ChoreKit
 import SwiftUI
 
-/// Parents pick chores and a time, then start. One-off chores can be
-/// added here without saving them to the library.
+/// Parents pick chores, optionally assign some to a person with a reward,
+/// optionally turn on Blitz mode (a timer), then start. One-off chores can
+/// be added here without saving them to the library.
 struct StartBlitzView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @Environment(\.dismiss) private var dismiss
+    @State private var blitzMode = false
     @State private var minutes = 30
+    @State private var assignments: [UUID: Person] = [:]
+    @State private var prizes: [Person: String] = [:]
     @State private var picked: [UUID] = []
     @State private var oneOffs: [Chore] = []
     /// One-offs also being saved to the library; used as a fallback if that save hasn't landed yet.
@@ -25,14 +30,37 @@ struct StartBlitzView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("How long", selection: $minutes) {
-                        Text("30 min").tag(30)
-                        Text("45 min").tag(45)
-                        Text("60 min").tag(60)
+                    Toggle(isOn: $blitzMode.animation()) {
+                        VStack(alignment: .leading) {
+                            Text("Blitz mode").font(.headline)
+                            Text("Race the clock with a countdown on the TV").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    Text("\(picked.count + oneOffs.count) chores picked · about \(totalMinutes) min of work")
+                    if blitzMode {
+                        Picker("How long", selection: $minutes) {
+                            Text("30 min").tag(30)
+                            Text("45 min").tag(45)
+                            Text("60 min").tag(60)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    Text(showTimes ? "\(picked.count + oneOffs.count) chores picked · about \(totalMinutes) min of work"
+                                   : "\(picked.count + oneOffs.count) chores picked")
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+                if !assignedPeople.isEmpty {
+                    Section {
+                        ForEach(assignedPeople) { p in
+                            HStack {
+                                PersonBadge(person: p)
+                                TextField("Reward for \(p.name), like $20", text: prizeBinding(p))
+                            }
+                        }
+                    } header: {
+                        Text("Rewards")
+                    } footer: {
+                        Text("Earned when all of their assigned chores are done. Leave blank for no reward.")
+                    }
                 }
                 Section {
                     Button { addingOneOff = true } label: {
@@ -43,20 +71,31 @@ struct StartBlitzView: View {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
                             Text(c.name)
                             Spacer()
-                            Text("just this time").font(.caption).foregroundStyle(.secondary)
+                            assignMenu(c.id)
                         }
                     }
-                    .onDelete { oneOffs.remove(atOffsets: $0) }
+                    .onDelete { offsets in
+                        for i in offsets { assignments[oneOffs[i].id] = nil }
+                        oneOffs.remove(atOffsets: offsets)
+                    }
                 }
                 ForEach(rooms, id: \.self) { room in
                     Section(room) {
                         ForEach(chores.filter { $0.room == room }) { chore in
-                            Button { toggle(chore.id) } label: {
-                                HStack {
-                                    Image(systemName: picked.contains(chore.id) ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(picked.contains(chore.id) ? Color.accentColor : Color.secondary)
-                                    Text(chore.name).foregroundStyle(.primary)
-                                    Spacer()
+                            HStack {
+                                Button { toggle(chore.id) } label: {
+                                    HStack {
+                                        Image(systemName: picked.contains(chore.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(picked.contains(chore.id) ? Color.accentColor : Color.secondary)
+                                        Text(chore.name).foregroundStyle(.primary)
+                                        Spacer()
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.borderless)
+                                if picked.contains(chore.id) {
+                                    assignMenu(chore.id)
+                                } else if showTimes {
                                     Text("\(chore.minutes) min").foregroundStyle(.secondary)
                                 }
                             }
@@ -64,19 +103,22 @@ struct StartBlitzView: View {
                     }
                 }
             }
-            .navigationTitle("Start a blitz")
+            .navigationTitle("Start chores")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") {
                         starting = true
-                        let ids = picked, extras = oneOffs, saved = savedOneOffs, mins = minutes
+                        let ids = picked, extras = oneOffs, saved = savedOneOffs
+                        let mins: Int? = blitzMode ? minutes : nil
+                        let assigned = assignments, rewards = prizes
                         Task {
                             let ok = await store.apply { state in
                                 let notYetSaved = saved.filter { c in !state.chores.contains { $0.id == c.id } }
                                 try state.startBlitz(by: me, choreIDs: ids, oneOffs: extras + notYetSaved,
-                                                     minutes: mins, now: .now)
+                                                     minutes: mins, now: .now,
+                                                     assignments: assigned, prizes: rewards)
                             }
                             starting = false
                             if ok { dismiss() }
@@ -101,7 +143,42 @@ struct StartBlitzView: View {
     }
 
     func toggle(_ id: UUID) {
-        if let i = picked.firstIndex(of: id) { picked.remove(at: i) } else { picked.append(id) }
+        if let i = picked.firstIndex(of: id) {
+            picked.remove(at: i)
+            assignments[id] = nil
+        } else {
+            picked.append(id)
+        }
+    }
+
+    /// People with at least one assigned chore, in family order.
+    var assignedPeople: [Person] {
+        Person.allCases.filter { p in assignments.values.contains(p) }
+    }
+
+    func prizeBinding(_ p: Person) -> Binding<String> {
+        Binding(get: { prizes[p] ?? "" }, set: { prizes[p] = $0 })
+    }
+
+    /// "Anyone" or a specific person for a picked chore.
+    func assignMenu(_ id: UUID) -> some View {
+        Menu {
+            Button("Anyone") { assignments[id] = nil }
+            ForEach(Person.allCases) { p in
+                Button(p.name) { assignments[id] = p }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if let p = assignments[id] {
+                    PersonBadge(person: p, size: 22)
+                    Text(p.name)
+                } else {
+                    Text("Anyone")
+                }
+                Image(systemName: "chevron.up.chevron.down").font(.caption2)
+            }
+            .font(.subheadline)
+        }
     }
 }
 

@@ -4,9 +4,13 @@ import SwiftUI
 struct ChoreLibraryView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @AppStorage("me") private var meRaw = ""
     @State private var editing: Chore?
     @State private var adding = false
+    @State private var scanning = false
+    @State private var confirmingClear = false
+    @State private var editingPrizes = false
 
     var chores: [Chore] { store.state?.chores ?? [] }
     var rooms: [String] { store.state?.rooms ?? [] }
@@ -22,6 +26,15 @@ struct ChoreLibraryView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 6)
                         }
+                        if RoomScanner.canSeePhotos {
+                            Button { scanning = true } label: {
+                                Label("Scan a room", systemImage: "camera.viewfinder")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        } else {
+                            Label("Update to iOS 27 to use Scan a room", systemImage: "camera.viewfinder")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 ForEach(rooms, id: \.self) { room in
@@ -33,7 +46,9 @@ struct ChoreLibraryView: View {
                                 HStack {
                                     Text(chore.name)
                                     Spacer()
-                                    Text("\(chore.minutes) min").foregroundStyle(.secondary)
+                                    if showTimes {
+                                        Text("\(chore.minutes) min").foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                             .swipeActions {
@@ -52,8 +67,30 @@ struct ChoreLibraryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Text("Using as \(me.name)")
+                        if me.isParent {
+                            Toggle("Show chore times", isOn: Binding(
+                                get: { showTimes },
+                                set: { v in store.run { try $0.setShowTimes(v, by: me) } }))
+                        }
+                        if HouseholdState.canSetGameMode(me) {
+                            Toggle("Game mode", isOn: Binding(
+                                get: { store.state?.isGameMode ?? false },
+                                set: { v in store.run { try $0.setGameMode(v, by: me) } }))
+                        }
+                        if me.isParent {
+                            Button("Prize pot…") { editingPrizes = true }
+                            Button("Remove the starter chores", role: .destructive) { confirmingClear = true }
+                        }
                         Button("Switch person") { meRaw = "" }
                     } label: { PersonBadge(person: me) }
+                }
+            }
+            .sheet(isPresented: $scanning) { RoomScanView(me: me) }
+            .sheet(isPresented: $editingPrizes) { PrizePotView(me: me) }
+            .confirmationDialog("Remove the 20 starter chores? Chores you added yourself stay.",
+                                isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Remove starter chores", role: .destructive) {
+                    store.run { try $0.removeStarterChores(by: me) }
                 }
             }
             .sheet(isPresented: $adding) {
@@ -70,13 +107,17 @@ struct ChoreDetailView: View {
     let me: Person
     let chore: Chore
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @State private var editing = false
 
     var current: Chore { store.state?.chores.first { $0.id == chore.id } ?? chore }
 
     var body: some View {
         List {
-            Section { Text("\(current.room) · about \(current.minutes) min").foregroundStyle(.secondary) }
+            Section {
+                Text(showTimes ? "\(current.room) · about \(current.minutes) min" : current.room)
+                    .foregroundStyle(.secondary)
+            }
             Section("How to do it") {
                 ForEach(Array(current.steps.enumerated()), id: \.offset) { i, step in
                     HStack(alignment: .top, spacing: 12) {

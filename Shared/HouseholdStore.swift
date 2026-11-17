@@ -13,9 +13,16 @@ final class HouseholdStore: ObservableObject {
     @Published private(set) var state: HouseholdState?
     @Published private(set) var isLoading = true
     /// Plain-English problem to show, or nil when everything's fine.
-    @Published var problem: String?
+    @Published var problem: String? {
+        didSet { if problem != nil { problemShownAt = Date() } }
+    }
+    /// Keeps a problem on screen long enough to read before a background
+    /// refresh clears it.
+    private var problemShownAt = Date.distantPast
 
-    private let db = CKContainer(identifier: HouseholdStore.containerID).publicCloudDatabase
+    /// Lazy so `-demo` runs never touch CloudKit (unsigned simulator builds
+    /// have no iCloud entitlement and CKContainer traps at init).
+    private lazy var db = CKContainer(identifier: HouseholdStore.containerID).publicCloudDatabase
     private let recordID = CKRecord.ID(recordName: "household-main")
     private let recordType = "Household"
     private let pollSeconds: Double
@@ -23,14 +30,23 @@ final class HouseholdStore: ObservableObject {
 
     /// Launch with `-demo` to use a local sample blitz instead of iCloud
     /// (for simulator screenshots).
-    private let demo = ProcessInfo.processInfo.arguments.contains("-demo")
+    /// `-demoFresh`: a just-started 12-chore blitz with nothing claimed.
+    private let demoFresh = ProcessInfo.processInfo.arguments.contains("-demoFresh")
+    /// `-demoGame`: the sample list with Game mode on; Reagen has 2 done
+    /// chores and 1 spin left. In Debug builds, a few seconds in he finishes
+    /// another chore and then spins, so the TV effects can be seen.
+    private let demoGame = ProcessInfo.processInfo.arguments.contains("-demoGame")
+    private var demo: Bool { demoFresh || demoGame || ProcessInfo.processInfo.arguments.contains("-demo") }
 
     init(pollSeconds: Double) {
         self.pollSeconds = pollSeconds
         if demo {
-            state = Self.demoState()
+            state = demoFresh ? Self.freshDemoState() : demoGame ? Self.gameDemoState() : Self.demoState()
             isLoading = false
         }
+        #if DEBUG
+        if demoGame { scheduleGameDemoEvents() }
+        #endif
     }
 
     func startPolling() {
@@ -54,7 +70,7 @@ final class HouseholdStore: ObservableObject {
             let rec = try await db.record(for: recordID)
             let fresh = try Self.decode(rec)
             if fresh != state { state = fresh }
-            problem = nil
+            if Date().timeIntervalSince(problemShownAt) > 10 { problem = nil }
         } catch let e as CKError where e.code == .unknownItem {
             state = nil
             problem = nil
@@ -118,7 +134,11 @@ final class HouseholdStore: ObservableObject {
         var s = HouseholdState.starter()
         let ids = s.chores.prefix(9).map(\.id)
         let now = Date()
-        try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: 30, now: now.addingTimeInterval(-11 * 60))
+        // No timer (the default), with Reagen assigned 2 chores for $20.
+        let noTimer = ProcessInfo.processInfo.arguments.contains("-demoNoTimer")
+        try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: noTimer ? nil : 30,
+                          now: now.addingTimeInterval(-11 * 60),
+                          assignments: [ids[2]: .reagen, ids[4]: .reagen], prizes: [.reagen: "$20"])
         let t = s.blitz!.tasks.map(\.id)
         try? s.claim(taskID: t[0], by: .braden)
         try? s.claim(taskID: t[2], by: .reagen)
@@ -128,6 +148,44 @@ final class HouseholdStore: ObservableObject {
         try? s.markDone(taskID: t[8], by: .brandon, now: now)
         return s
     }
+
+    private static func gameDemoState() -> HouseholdState {
+        var s = demoState()
+        try? s.setGameMode(true, by: .kira)
+        if let t = s.blitz?.tasks.map(\.id) {
+            try? s.markDone(taskID: t[2], by: .reagen, now: Date())
+        }
+        _ = try? s.spin(by: .reagen, roll: 0.1, now: Date().addingTimeInterval(-120))
+        return s
+    }
+
+    #if DEBUG
+    /// Demo only: Reagen finishes another chore at 4s, then spins at 9s.
+    private func scheduleGameDemoEvents() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, var s = self.state, let b = s.blitz,
+                  let open = b.tasks.first(where: { $0.claimedBy == nil && $0.doneAt == nil }) else { return }
+            try? s.claim(taskID: open.id, by: .reagen)
+            try? s.markDone(taskID: open.id, by: .reagen, now: Date())
+            self.state = s
+            try? await Task.sleep(for: .seconds(5))
+            guard var s2 = self.state else { return }
+            _ = try? s2.spin(by: .reagen, roll: 0.5, now: Date())
+            self.state = s2
+        }
+    }
+    #endif
+
+    private static func freshDemoState() -> HouseholdState {
+        var s = HouseholdState.starter()
+        let ids = s.chores.prefix(12).map(\.id)
+        try? s.startBlitz(by: .kira, choreIDs: Array(ids), minutes: 45, now: Date().addingTimeInterval(-60))
+        return s
+    }
+
+    /// Whether chore minutes should be shown (a parent can turn this off).
+    var showTimes: Bool { state?.timesVisible ?? true }
 
     // MARK: Encoding
 

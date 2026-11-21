@@ -362,4 +362,44 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(s.earnings(for: .reagen), Earnings(owedCents: 25, paidCents: 25, spins: 2))
         XCTAssertEqual(s.earnings(for: .reagen).totalCents, 50)
     }
+
+    // Game mode sanity checks (Nov 2026 review).
+
+    func testUndoingAndRedoingAChoreDoesNotFarmSpins() throws {
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(3).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        let task = s.blitz!.tasks[0].id
+        try s.claim(taskID: task, by: .reagen)
+        try s.markDone(taskID: task, by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        try s.markNotDone(taskID: task, by: .reagen)
+        try s.markDone(taskID: task, by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0))
+    }
+
+    func testReagenCannotFinishSomeoneElsesChoreForASpin() throws {
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(2).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        let task = s.blitz!.tasks[0].id
+        try s.claim(taskID: task, by: .braden)
+        XCTAssertThrowsError(try s.markDone(taskID: task, by: .reagen, now: t0))
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+    }
+
+    func testParentFinishingReagensChoreStillGivesHimTheSpin() throws {
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(2).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        let task = s.blitz!.tasks[0].id
+        try s.claim(taskID: task, by: .reagen)
+        try s.markDone(taskID: task, by: .kira, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+    }
 }

@@ -68,6 +68,9 @@ struct SpinView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            if debugScreen == "spinGo" { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { spin() } }
+        }
     }
 
     func spin() {
@@ -185,24 +188,29 @@ struct SpinBanner: View {
 
     var body: some View {
         let left = store.state?.spinsLeft(for: me) ?? 0
-        if left > 0 {
-            Button { showing = true } label: {
-                HStack {
-                    Image(systemName: "sparkles")
-                    Text("You have \(left) prize spin\(left == 1 ? "" : "s")!")
-                        .font(.headline.monospaced())
-                    Spacer()
-                    Text("SPIN").font(.headline.weight(.black))
+        // Keep the banner (and the spin screen hanging off it) alive while the
+        // spin screen is up: using the last spin drops `left` to 0, and removing
+        // the banner then would tear the spin screen down mid-reveal.
+        Group {
+            if left > 0 || showing {
+                Button { showing = true } label: {
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text("You have \(left) prize spin\(left == 1 ? "" : "s")!")
+                            .font(.headline.monospaced())
+                        Spacer()
+                        Text("SPIN").font(.headline.weight(.black))
+                    }
+                    .padding()
+                    .foregroundStyle(.white)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(
+                        LinearGradient(colors: [.purple, .orange], startPoint: .leading, endPoint: .trailing)))
                 }
-                .padding()
-                .foregroundStyle(.white)
-                .background(RoundedRectangle(cornerRadius: 14).fill(
-                    LinearGradient(colors: [.purple, .orange], startPoint: .leading, endPoint: .trailing)))
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .onAppear { if debugScreen == "spin" { showing = true } }
-            .fullScreenCover(isPresented: $showing) { SpinView(me: me) }
         }
+        .onAppear { if debugScreen == "spin" || debugScreen == "spinGo" { showing = true } }
+        .fullScreenCover(isPresented: $showing) { SpinView(me: me) }
     }
 }
 

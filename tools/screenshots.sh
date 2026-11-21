@@ -14,7 +14,6 @@ phone() { # name me wait args...
   local name=$1 me=$2 w=$3; shift 3
   xcrun simctl terminate $P com.brandonbourne.ChoreBlitz 2>/dev/null
   xcrun simctl spawn $P defaults write com.brandonbourne.ChoreBlitz me "$me"
-  xcrun simctl spawn $P defaults write com.brandonbourne.ChoreBlitz seenHint -bool ${HINT:-true}
   xcrun simctl launch $P com.brandonbourne.ChoreBlitz "$@" >/dev/null; sleep $w
   xcrun simctl io $P screenshot $OUT/phone-$name.png >/dev/null 2>&1
 }
@@ -26,7 +25,6 @@ tv() { # name wait args...
 }
 phone warmup kira 4 -demo
 phone who "" 3 -demo
-HINT=false phone today-kira-hint kira 3 -demo
 phone today-kira kira 3 -demo
 xcrun simctl ui $P appearance dark
 phone today-kira-dark kira 3 -demo
@@ -43,6 +41,7 @@ phone finished-kira kira 3 -demoFinished
 phone finished-reagen reagen 3 -demoFinished
 phone detail braden 4 -demo -screen detail
 phone chores kira 3 -demo -screen chores
+phone chore-detail kira 4 -demo -screen chore
 phone settings-kira kira 3 -demo -screen settings
 phone settings-reagen reagen 3 -demo -screen settings
 phone start kira 4 -demoEmpty -screen start

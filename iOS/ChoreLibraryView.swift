@@ -12,6 +12,8 @@ struct ChoreLibraryView: View {
     var chores: [Chore] { store.state?.chores ?? [] }
     var rooms: [String] { store.state?.rooms ?? [] }
 
+    @State private var debugChoreOpen = false
+
     var body: some View {
         NavigationStack {
             List {
@@ -76,6 +78,11 @@ struct ChoreLibraryView: View {
             .skinnedList()
             .navigationTitle("Chores")
             .pinnedTitle("Chores")
+            // Debug: -screen chore opens the first chore's how-to.
+            .navigationDestination(isPresented: $debugChoreOpen) {
+                if let c = chores.first { ChoreDetailView(me: me, chore: c) }
+            }
+            .onAppear { if debugScreen == "chore" { debugChoreOpen = true } }
             .sheet(isPresented: $scanning) { RoomScanView(me: me) }
             .sheet(isPresented: $adding) {
                 ChoreEditorView(title: "New chore", chore: Chore(name: "", room: rooms.first ?? "Kitchen", minutes: 10, steps: [""]),

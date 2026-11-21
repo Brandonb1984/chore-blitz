@@ -91,6 +91,21 @@ struct IdleView: View {
                 }
                 .buttonStyle(BlitzButtonStyle(kind: .accent, height: 58))
                 .padding(.top, 4)
+                if lastBlitz?.isOver != true {
+                    VStack(spacing: 8) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 34))
+                            .foregroundStyle(skin.accentText)
+                        Text("No list going").font(skin.title(20))
+                        Text("Pick today's chores and they show up on the TV and on everyone's phone.")
+                            .font(skin.body(15))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(skin.text2)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .cardBox()
+                }
             } else if lastBlitz?.isOver != true {
                 VStack(spacing: 8) {
                     Image(systemName: "bolt.slash.fill")

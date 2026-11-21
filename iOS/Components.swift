@@ -116,6 +116,32 @@ extension View {
     func skinnedList() -> some View {
         scrollContentBackground(.hidden).background { PageBackground() }
     }
+
+    /// Gives a tab's root list the same big title, in the same spot, as Today.
+    func pinnedTitle(_ title: String) -> some View { modifier(PinnedTitle(title: title)) }
+}
+
+/// Hides the system navigation bar on a tab's root screen and draws the
+/// app's own title, so all three tabs line up.
+struct PinnedTitle: ViewModifier {
+    @Environment(\.skin) private var skin
+    let title: String
+
+    func body(content: Content) -> some View {
+        content
+            .contentMargins(.top, 4, for: .scrollContent)
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Text(skin.arcade ? title.uppercased() : title)
+                    .font(skin.title(34))
+                    .foregroundStyle(skin.arcade ? skin.accent : skin.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
+                    .background(skin.bg)
+            }
+    }
 }
 
 /// A title with an optional smaller line under it, for settings-style rows.

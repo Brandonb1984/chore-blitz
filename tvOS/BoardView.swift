@@ -194,7 +194,7 @@ struct ChoreGrid: View {
             let cols = Self.columns(for: tasks.count)
             let rows = max(1, Int((Double(tasks.count) / Double(cols)).rounded(.up)))
             let gap: CGFloat = rows > 8 ? 10 : 14
-            let rowHeight = min(132, max(44, (geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(rows)))
+            let rowHeight = min(190, max(44, (geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(rows)))
             let chunks = stride(from: 0, to: tasks.count, by: rows).map { Array(tasks[$0..<min($0 + rows, tasks.count)]) }
             HStack(alignment: .top, spacing: 14) {
                 ForEach(Array(chunks.enumerated()), id: \.offset) { _, chunk in
@@ -223,17 +223,17 @@ struct ChoreCard: View {
     var body: some View {
         let done = task.doneAt != nil
         let working = !done && task.claimedBy != nil
-        let font = min(40, max(22, height * 0.31))
+        let font = min(46, max(22, height * 0.31))
         let twoLines = height >= font * 2.7
         HStack(spacing: font * 0.5) {
             if let who = task.claimedBy {
-                PersonBadge(person: who, size: min(58, height * 0.52))
+                PersonBadge(person: who, size: min(66, height * 0.5))
                     .opacity(done ? 0.75 : 1)
             }
             Text(task.name)
                 .font(look.text(font, .bold))
-                .strikethrough(done, color: Color.white.opacity(0.5))
-                .foregroundStyle(done ? Color.white.opacity(0.45) : Color.white)
+                .strikethrough(done, color: Color.white.opacity(0.4))
+                .foregroundStyle(done ? Color.white.opacity(0.6) : Color.white)
                 .lineLimit(twoLines ? 2 : 1)
                 .minimumScaleFactor(0.65)
             Spacer(minLength: 0)
@@ -290,14 +290,14 @@ struct PersonLane: View {
             PersonBadge(person: person, size: 84)
             VStack(alignment: .leading, spacing: 6) {
                 Text(look.name(person))
-                    .font(look.title(36))
+                    .font(look.title(40))
                 status(working: working)
-                    .font(look.text(27))
-                    .lineLimit(1)
+                    .font(look.text(29))
+                    .lineLimit(2)
                     .truncationMode(.tail)
                 if let extra = extraLine {
                     Text(extra)
-                        .font(look.text(25))
+                        .font(look.text(27, .bold))
                         .foregroundStyle(look.accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -306,7 +306,7 @@ struct PersonLane: View {
             Spacer(minLength: 0)
             VStack(spacing: 0) {
                 Text(look.game ? "\(personXP(person, blitz))" : "\(done)")
-                    .font(look.number(60))
+                    .font(look.number(66))
                     .foregroundStyle(look.game ? Palette.arcadeMint : Color.white)
                     .contentTransition(.numericText())
                 Text(look.game ? "XP" : "done")
@@ -413,64 +413,75 @@ struct FinishedBoard: View {
         let done = blitz.tasks(in: .done).count
         let all = !blitz.tasks.isEmpty && done == blitz.tasks.count
         let people = blitz.doneByPerson
+        let left = blitz.tasks.filter { $0.doneAt == nil }
         VStack(spacing: 0) {
             Spacer(minLength: 0)
             HStack(spacing: 26) {
                 if all {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 84, weight: .black))
+                        .font(.system(size: 90, weight: .black))
                         .foregroundStyle(look.accent)
                 }
                 Text(look.game ? (all ? "ALL CLEARED!" : "THAT'S A WRAP") : (all ? "All done!" : "That's a wrap"))
-                    .font(look.title(110))
+                    .font(look.title(120))
             }
             Text("\(done) of \(blitz.tasks.count) chores done")
-                .font(look.text(38))
+                .font(look.text(42))
                 .foregroundStyle(TVLook.dim)
-                .padding(.top, 8)
-            SegmentedProgress(tasks: blitz.tasks, height: 22, track: Color.white.opacity(0.12))
-                .frame(maxWidth: 1100)
-                .padding(.top, 34)
+                .padding(.top, 6)
+            SegmentedProgress(tasks: blitz.tasks, height: 26, track: Color.white.opacity(0.12))
+                .frame(maxWidth: 1300)
+                .padding(.top, 36)
             if !people.isEmpty {
-                HStack(alignment: .top, spacing: 22) {
+                HStack(alignment: .top, spacing: 24) {
                     ForEach(people, id: \.person) { entry in
-                        tally(entry, columns: people.count)
+                        tally(entry, wide: people.count <= 3)
                     }
                 }
-                .padding(.top, 50)
+                .padding(.top, 48)
+            }
+            if !left.isEmpty {
+                // What's still open, so it's clear what carries over.
+                (Text("Still to do:  ").foregroundColor(TVLook.faint)
+                    + Text(left.map(\.name).joined(separator: "  ·  ")).foregroundColor(TVLook.dim))
+                    .font(look.text(28))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(maxWidth: 1500)
+                    .padding(.top, 40)
             }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    func tally(_ entry: PersonDone, columns: Int) -> some View {
-        let shown = entry.tasks.prefix(5)
+    func tally(_ entry: PersonDone, wide: Bool) -> some View {
+        let shown = entry.tasks.prefix(4)
         let hidden = entry.tasks.count - shown.count
         return VStack(spacing: 10) {
-            HStack(spacing: 18) {
-                PersonBadge(person: entry.person, size: 76)
+            HStack(spacing: 20) {
+                PersonBadge(person: entry.person, size: 92)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(look.name(entry.person)).font(look.title(34))
+                    Text(look.name(entry.person)).font(look.title(42))
                     Text(look.game ? "\(personXP(entry.person, blitz)) XP · \(entry.tasks.count) done"
                                    : (entry.tasks.count == 1 ? "1 chore" : "\(entry.tasks.count) chores"))
-                        .font(look.text(26, .bold))
+                        .font(look.text(30, .bold))
                         .foregroundStyle(look.game ? Palette.arcadeMint : TVLook.dim)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 10)
             ForEach(Array(shown)) { task in
                 Text(task.name)
-                    .font(look.text(25))
-                    .foregroundStyle(TVLook.dim)
+                    .font(look.text(29))
+                    .foregroundStyle(Color.white.opacity(0.8))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if hidden > 0 {
                 Text("and \(hidden) more")
-                    .font(look.text(25))
+                    .font(look.text(29))
                     .foregroundStyle(TVLook.faint)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -480,17 +491,17 @@ struct FinishedBoard: View {
                     Image(systemName: reward.paidAt != nil ? "checkmark.seal.fill" : "star.fill")
                     Text(reward.paidAt != nil ? "\(reward.prize) paid" : "Earned \(reward.prize)!")
                 }
-                .font(look.text(26, .heavy))
+                .font(look.text(28, .heavy))
                 .foregroundStyle(Palette.onAccent)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 9)
                 .background(look.accent, in: Capsule())
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 10)
             }
         }
-        .padding(26)
-        .frame(maxWidth: columns <= 2 ? 520 : 420, alignment: .top)
+        .padding(30)
+        .frame(maxWidth: wide ? 540 : 420, alignment: .top)
         .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: look.corner, style: .continuous))
     }
 }

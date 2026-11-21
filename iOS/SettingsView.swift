@@ -116,6 +116,7 @@ struct SettingsView: View {
             }
             .skinnedList()
             .navigationTitle("Settings")
+            .pinnedTitle("Settings")
             .sheet(isPresented: $editingPrizes) { PrizePotView(me: me) }
             .onAppear { if debugScreen == "prizes" { editingPrizes = true } }
             .confirmationDialog("Remove the 20 starter chores? Chores you added yourself stay.",

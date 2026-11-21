@@ -75,6 +75,7 @@ struct ChoreLibraryView: View {
             }
             .skinnedList()
             .navigationTitle("Chores")
+            .pinnedTitle("Chores")
             .sheet(isPresented: $scanning) { RoomScanView(me: me) }
             .sheet(isPresented: $adding) {
                 ChoreEditorView(title: "New chore", chore: Chore(name: "", room: rooms.first ?? "Kitchen", minutes: 10, steps: [""]),

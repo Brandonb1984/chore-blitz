@@ -76,15 +76,15 @@ struct RewardCard: View {
                         .frame(height: 8)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !earned {
                     Text("\(done) of \(mine.count)").font(skin.body(14, .bold)).foregroundStyle(skin.text2)
+                } else if reward.paidAt == nil && me.isParent {
+                    Button("Mark paid") {
+                        store.run { try $0.markRewardPaid(for: reward.person, by: me, now: .now) }
+                    }
+                    .buttonStyle(BlitzButtonStyle(kind: .done, height: 38, fill: false))
                 }
-            }
-            if earned && reward.paidAt == nil && me.isParent {
-                Button("Mark \(reward.prize) paid") {
-                    store.run { try $0.markRewardPaid(for: reward.person, by: me, now: .now) }
-                }
-                .buttonStyle(BlitzButtonStyle(kind: .done, height: 46))
             }
         }
         .cardBox()
@@ -135,12 +135,12 @@ struct EarningsPanel: View {
                     }
                 }
                 Spacer(minLength: 0)
-            }
-            if me.isParent && (e.owedCents > 0 || !extras.isEmpty) {
-                Button(e.owedCents > 0 ? "Mark \(Prize.format(cents: e.owedCents)) paid" : "Mark all paid") {
-                    store.run { try $0.markAllSpinsPaid(for: earner, by: me, now: .now) }
+                if me.isParent && (e.owedCents > 0 || !extras.isEmpty) {
+                    Button("Mark paid") {
+                        store.run { try $0.markAllSpinsPaid(for: earner, by: me, now: .now) }
+                    }
+                    .buttonStyle(BlitzButtonStyle(kind: .done, height: 38, fill: false))
                 }
-                .buttonStyle(BlitzButtonStyle(kind: .done, height: 46))
             }
         }
         .cardBox()

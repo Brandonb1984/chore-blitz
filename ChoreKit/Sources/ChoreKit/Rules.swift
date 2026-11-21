@@ -47,6 +47,7 @@ public extension HouseholdState {
                              assignments: [UUID: Person] = [:], prizes: [Person: String] = [:]) throws {
         guard person.isParent else { throw ChoreError.parentsOnly }
         if runningBlitz != nil { throw ChoreError.blitzAlreadyRunning }
+        bankUnopenedChests()
         let picked = choreIDs.compactMap { id in chores.first { $0.id == id } } + oneOffs
         guard !picked.isEmpty else { throw ChoreError.noChoresPicked }
         let tasks: [BlitzTask] = picked.map { chore in
@@ -104,6 +105,7 @@ public extension HouseholdState {
     /// Clears a finished blitz so the TV goes back to its idle screen.
     mutating func clearBlitz(by person: Person) throws {
         guard person.isParent else { throw ChoreError.parentsOnly }
+        bankUnopenedChests()
         blitz = nil
     }
 
@@ -178,13 +180,66 @@ public extension HouseholdState {
         prizePot = pot.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.weight > 0 }
     }
 
-    /// One spin per chore this person finished in the current (or just
-    /// finished) list, minus spins already used on it.
-    func spinsLeft(for person: Person) -> Int {
-        guard isGameMode, Self.spinners.contains(person), let b = blitz else { return 0 }
-        let earned = b.tasks.filter { $0.doneAt != nil && $0.claimedBy == person }.count
+    mutating func setTVMusic(_ on: Bool, by person: Person) throws {
+        guard Self.canSetGameMode(person) else { throw ChoreError.parentsOnly }
+        tvMusic = on
+    }
+
+    /// When true, longer chores earn more loot chests (see `chests(forMinutes:)`),
+    /// so grabbing only the quickest chores isn't the best deal.
+    static let bigChoresEarnMore = true
+
+    /// Loot chests a finished chore is worth: one per 10 minutes, at least 1, at most 3.
+    static func chests(forMinutes minutes: Int) -> Int {
+        guard bigChoresEarnMore else { return 1 }
+        return min(3, max(1, (minutes + 5) / 10))
+    }
+
+    /// Spins logged against banked chests (not tied to a list) use this id.
+    static let bankedSpinID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
+    /// Chests earned on the current (or just finished) list and not opened yet.
+    private func chestsLeftInList(for person: Person) -> Int {
+        guard let b = blitz else { return 0 }
+        let earned = b.tasks.filter { $0.doneAt != nil && $0.claimedBy == person }
+            .reduce(0) { $0 + Self.chests(forMinutes: $1.minutes) }
         let used = allSpins.filter { $0.person == person && $0.blitzID == b.id }.count
         return max(0, earned - used)
+    }
+
+    /// Chests carried over from earlier lists.
+    func bankedChests(for person: Person) -> Int {
+        max(0, spinCredits?[person.rawValue] ?? 0)
+    }
+
+    /// Called before the current list goes away, so unopened chests carry over.
+    private mutating func bankUnopenedChests() {
+        guard isGameMode else { return }
+        for p in Self.spinners {
+            let left = chestsLeftInList(for: p)
+            guard left > 0 else { continue }
+            var credits = spinCredits ?? [:]
+            credits[p.rawValue, default: 0] += left
+            spinCredits = credits
+        }
+    }
+
+    /// Loot chests this person can open now: the ones earned on the current
+    /// (or just finished) list, plus any carried over from earlier lists.
+    func spinsLeft(for person: Person) -> Int {
+        guard isGameMode, Self.spinners.contains(person) else { return 0 }
+        return chestsLeftInList(for: person) + bankedChests(for: person)
+    }
+
+    /// True for the pot's big prize: named "jackpot", or the top money prize
+    /// when it comes up 5% of the time or less.
+    func isJackpot(_ prize: Prize) -> Bool {
+        if prize.name.lowercased().contains("jackpot") { return true }
+        let pot = prizes
+        let total = pot.reduce(0) { $0 + $1.weight }
+        guard pot.count > 1, total > 0, let cents = prize.cents,
+              let top = pot.compactMap(\.cents).max(), cents == top else { return false }
+        return Double(prize.weight) / Double(total) <= 0.05
     }
 
     /// Picks a prize by weight. `roll` is in 0..<1 (random in the app, fixed in tests).
@@ -203,9 +258,19 @@ public extension HouseholdState {
     mutating func spin(by person: Person, roll: Double, now: Date) throws -> Spin {
         guard isGameMode else { throw ChoreError.gameModeOff }
         guard Self.spinners.contains(person) else { throw ChoreError.notSpinner }
-        guard spinsLeft(for: person) > 0, let b = blitz else { throw ChoreError.noSpinsLeft }
+        let inList = chestsLeftInList(for: person)
+        guard inList + bankedChests(for: person) > 0 else { throw ChoreError.noSpinsLeft }
         guard let prize = Self.pick(from: prizes, roll: roll) else { throw ChoreError.emptyPrizePot }
-        let s = Spin(person: person, prize: prize, blitzID: b.id, at: now)
+        let s: Spin
+        if inList > 0, let b = blitz {
+            s = Spin(person: person, prize: prize, blitzID: b.id, at: now)
+        } else {
+            // Open a chest carried over from an earlier list.
+            var credits = spinCredits ?? [:]
+            credits[person.rawValue] = bankedChests(for: person) - 1
+            spinCredits = credits
+            s = Spin(person: person, prize: prize, blitzID: Self.bankedSpinID, at: now)
+        }
         spinLog = allSpins + [s]
         return s
     }
@@ -214,6 +279,16 @@ public extension HouseholdState {
         guard person.isParent else { throw ChoreError.parentsOnly }
         guard var log = spinLog, let i = log.firstIndex(where: { $0.id == spinID }) else { return }
         log[i].paidAt = now
+        spinLog = log
+    }
+
+    /// A parent pays everything this person is owed from loot chests in one go.
+    mutating func markAllSpinsPaid(for earner: Person, by person: Person, now: Date) throws {
+        guard person.isParent else { throw ChoreError.parentsOnly }
+        guard var log = spinLog else { return }
+        for i in log.indices where log[i].person == earner && log[i].paidAt == nil {
+            log[i].paidAt = now
+        }
         spinLog = log
     }
 }

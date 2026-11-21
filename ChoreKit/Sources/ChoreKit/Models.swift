@@ -258,7 +258,15 @@ public struct HouseholdState: Codable, Equatable, Sendable {
     /// Every spin ever won, newest last, so parents can see what's owed.
     public var spinLog: [Spin]?
 
+    /// Loot chests earned on earlier lists and not opened yet, by person
+    /// (keyed by `Person.rawValue`). Clearing the TV or starting a new list
+    /// moves unopened chests here so they aren't lost.
+    public var spinCredits: [String: Int]?
+    /// Game mode music on the TV. nil means on.
+    public var tvMusic: Bool?
+
     public var isGameMode: Bool { gameMode ?? false }
+    public var isMusicOn: Bool { tvMusic ?? true }
     public var prizes: [Prize] {
         // The first Game mode build shipped a bigger starter pot. If that's
         // what's saved, use the new 50¢/$1 pot instead.

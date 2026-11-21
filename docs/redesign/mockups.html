@@ -1,0 +1,287 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0C111E;--card:#182036;--card2:#222B45;--line:#2A3452;--text:#F4F6FB;--text2:#98A2BA;--accent:#FFC83D;--onaccent:#1B1400;--done:#3DDC84;
+--brandon:#3B8CFF;--kira:#F0569A;--braden:#34C77B;--reagen:#FF9534;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05070c;font-family:Nunito,Inter,sans-serif;color:var(--text);padding:40px;display:flex;gap:40px;flex-wrap:wrap}
+.phone{color:var(--text);width:390px;height:844px;background:var(--bg);border-radius:0;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.light{--bg:#F2F3F8;--card:#FFFFFF;--card2:#ECEEF5;--line:#E1E4EE;--text:#131826;--text2:#5F6880;--accent:#FFC83D}
+.status{height:50px;flex:none}
+.scroll{flex:1;overflow:hidden;padding:0 16px}
+.top{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 14px}
+h1{font-size:34px;font-weight:900;letter-spacing:-.5px}
+.sub{font-size:14px;color:var(--text2);font-weight:700}
+.av{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:900;flex:none}
+.av.s22{width:22px;height:22px;font-size:11px}.av.s28{width:28px;height:28px;font-size:14px}.av.s36{width:36px;height:36px;font-size:17px}.av.s44{width:44px;height:44px;font-size:21px}
+.B,.seg i.B,.tvseg i.B{background:var(--brandon)}.K,.seg i.K,.tvseg i.K{background:var(--kira)}.D,.seg i.D,.tvseg i.D{background:var(--braden)}.R,.seg i.R,.tvseg i.R{background:var(--reagen)}
+.card{background:var(--card);border-radius:20px;padding:16px;margin-bottom:12px}
+.prog-top{display:flex;align-items:baseline;justify-content:space-between}
+.big{font-size:28px;font-weight:900}.big small{font-size:16px;color:var(--text2);font-weight:800}
+.seg{display:flex;gap:3px;margin-top:12px}.seg i{flex:1;height:10px;border-radius:5px;background:var(--card2)}
+.sec{font-size:13px;font-weight:900;letter-spacing:.8px;color:var(--text2);text-transform:uppercase;margin:18px 4px 8px;display:flex;justify-content:space-between}
+.hero{background:var(--card);border-radius:20px;padding:16px;margin-bottom:12px;border:2px solid var(--reagen)}
+.hero h2{font-size:22px;font-weight:900;line-height:1.15}
+.meta{font-size:14px;color:var(--text2);font-weight:700;margin-top:3px}
+.row2{display:flex;gap:10px;margin-top:14px}
+.btn{border-radius:14px;font-weight:900;font-size:17px;display:flex;align-items:center;justify-content:center;height:50px;padding:0 18px}
+.btn.done{background:var(--done);color:#04230f;flex:1.6}
+.btn.ghost{background:var(--card2);color:var(--text);flex:1}
+.btn.claim{background:var(--accent);color:var(--onaccent);height:40px;font-size:15px;border-radius:12px;padding:0 16px}
+.list{background:var(--card);border-radius:20px;overflow:hidden;margin-bottom:12px}
+.item{display:flex;align-items:center;gap:12px;padding:13px 14px 13px 16px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .t{flex:1;min-width:0}.item .n{font-size:17px;font-weight:800;line-height:1.2}.item .m{font-size:13px;color:var(--text2);font-weight:700;margin-top:1px}
+.pill{font-size:12px;font-weight:900;padding:3px 9px;border-radius:99px;background:var(--card2);color:var(--text2)}
+.reward{display:flex;gap:12px;align-items:center}
+.bar{height:8px;border-radius:4px;background:var(--card2);margin-top:8px;overflow:hidden}.bar b{display:block;height:100%;background:var(--reagen);border-radius:4px}
+.tab{height:84px;flex:none;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding-top:10px;font-size:11px;font-weight:800;color:var(--text2)}
+.tab div{text-align:center;width:80px}.tab .ic{font-size:22px;height:28px}.tab .on{color:var(--accent)}
+.light .tab .on{color:#B07A00}
+.donechips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;align-items:center;gap:6px;background:var(--card);border-radius:99px;padding:5px 12px 5px 5px;font-size:13px;font-weight:800;color:var(--text2);text-decoration:line-through}
+.step{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--line)}
+.step:last-child{border:0}
+.num{width:30px;height:30px;border-radius:50%;border:2px solid var(--accent);color:var(--accent);font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
+.light .num{border-color:#C48A00;color:#C48A00}
+.num.ok{background:var(--done);border-color:var(--done);color:#04230f}
+.step p{font-size:17px;font-weight:700;line-height:1.3;padding-top:3px}
+.step.ok p{color:var(--text2);text-decoration:line-through}
+.sticky{flex:none;padding:12px 16px 34px;background:var(--bg)}
+.back{font-size:17px;font-weight:800;color:var(--accent);padding:4px}
+.light .back{color:#B07A00}
+/* arcade */
+.arc{--bg:#0F0524;--card:rgba(255,255,255,.09);--card2:rgba(255,255,255,.12);--line:rgba(255,255,255,.1);--text:#fff;--text2:#B9A8E0;--accent:#FFE14D;
+ background:linear-gradient(#0F0524,#2A0D45);}
+.arc .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:24px 24px}
+.arc .sec,.arc h1,.mono{font-family:"JetBrains Mono",monospace;font-weight:800}
+.arc .sec{color:#FFE14D}
+.arc .card,.arc .hero,.arc .list{border-radius:6px}
+.arc .hero{border:3px solid #FFE14D;box-shadow:5px 5px 0 rgba(0,0,0,.5)}
+.arc .btn{border-radius:4px;font-family:"JetBrains Mono",monospace;box-shadow:4px 4px 0 rgba(0,0,0,.5)}
+.arc .tab{background:#150830}
+.xp{display:flex;align-items:center;gap:12px}.xp .lv{font-family:"JetBrains Mono",monospace;font-weight:800;font-size:22px;color:#FFE14D}
+.xp .track{flex:1;height:18px;border:3px solid rgba(255,255,255,.7);background:rgba(255,255,255,.1)}.xp .track b{display:block;height:100%;background:linear-gradient(90deg,#3DE0FF,#5DFFC1)}
+.spin{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:6px;margin-bottom:12px;background:linear-gradient(90deg,#8A3DFF,#FF8A3D);font-family:"JetBrains Mono",monospace;font-weight:800;box-shadow:5px 5px 0 rgba(0,0,0,.5)}
+.spin b{background:#FFE14D;color:#1b1400;padding:6px 14px;border-radius:4px}
+.toggle{width:51px;height:31px;border-radius:99px;background:var(--done);position:relative;flex:none}.toggle:after{content:"";position:absolute;right:2px;top:2px;width:27px;height:27px;border-radius:50%;background:#fff}
+.toggle.off{background:var(--card2)}.toggle.off:after{right:auto;left:2px}
+.beam{position:absolute;left:195px;top:150px;width:0;height:0;transform-origin:50% 100%;transform:translateX(-50%) rotate(var(--r));border-left:70px solid transparent;border-right:70px solid transparent;border-bottom:0;height:350px;width:150px;background:var(--c);clip-path:polygon(0 0,100% 0,62% 100%,38% 100%);border:0}
+/* TV */
+.tv{width:1920px;height:1080px;background:linear-gradient(#0B101D,#141C33);padding:60px 80px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.tvhead{display:flex;align-items:center;gap:40px;height:120px;flex:none}
+.tvcount{font-size:84px;font-weight:900;line-height:1;white-space:nowrap}.tvcount small{font-size:40px;color:var(--text2);font-weight:800}
+.tvseg{flex:1;display:flex;gap:6px}.tvseg i{flex:1;height:26px;border-radius:13px;background:rgba(255,255,255,.1)}
+.tvtimer{font-size:96px;font-weight:900;font-variant-numeric:tabular-nums}
+.tvbody{flex:1;display:flex;gap:40px;margin-top:30px;min-height:0}
+.tvgrid{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:14px}
+.tile{background:rgba(255,255,255,.1);border-radius:20px;padding:0 24px;display:flex;align-items:center;gap:18px;min-height:0;border-left:10px solid transparent}
+.tile .n{font-size:36px;font-weight:800;line-height:1.1;flex:1}
+.tile .r{font-size:22px;color:var(--text2);font-weight:700;margin-top:4px}
+.tile.go{background:rgba(255,255,255,.14)}
+.tile.dn{background:rgba(255,255,255,.04)}.tile.dn .n{color:rgba(255,255,255,.4);text-decoration:line-through}
+.tile .chk{font-size:34px;color:var(--done);font-weight:900}
+.av.s56{width:56px;height:56px;font-size:27px}.av.s84{width:84px;height:84px;font-size:40px}
+.people{width:600px;flex:none;display:flex;flex-direction:column;gap:14px}
+.lane{flex:1;background:rgba(255,255,255,.07);border-radius:24px;padding:0 26px;display:flex;align-items:center;gap:22px;min-height:0}
+.lane .who{font-size:34px;font-weight:900}.lane .what{font-size:26px;font-weight:700;color:var(--text2);margin-top:4px;line-height:1.15}
+.lane .what b{color:var(--text);font-weight:800}
+.lane .cnt{margin-left:auto;text-align:center}.lane .cnt b{font-size:56px;font-weight:900;line-height:1}.lane .cnt span{display:block;font-size:20px;color:var(--text2);font-weight:800}
+.lane.idle{opacity:.45}
+.tvlabel{font-size:26px;font-weight:900;letter-spacing:2px;color:var(--text2);text-transform:uppercase}
+.tvarc{background:linear-gradient(#0F0524,#240A3D)}
+.tvarc .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:40px 40px}
+.tvarc .tile,.tvarc .lane{border-radius:6px}
+.tvarc .tvcount,.tvarc .who,.tvarc .cnt b{font-family:"JetBrains Mono",monospace}
+.tvarc .tvcount{color:#FFE14D;font-size:72px}
+.tvxp{flex:1;height:44px;border:4px solid rgba(255,255,255,.7);background:rgba(255,255,255,.1)}.tvxp b{display:block;height:100%;width:62%;background:linear-gradient(90deg,#3DE0FF,#5DFFC1)}
+</style></head><body>
+
+<!-- 1. Today, running, Reagen -->
+<div class="phone" id="p1">
+ <div class="status"></div>
+ <div class="scroll">
+  <div class="top"><h1>Today</h1><span class="av s36 R">R</span></div>
+  <div class="card">
+   <div class="prog-top"><div class="big">5 <small>of 12 done</small></div><div class="sub">7 to go</div></div>
+   <div class="seg"><i class="D"></i><i class="R"></i><i class="B"></i><i class="K"></i><i class="K"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <div class="card reward"><span class="av s36 R">R</span><div style="flex:1"><div style="font-weight:900;font-size:16px">Finish your 3 chores to earn $20</div><div class="bar"><b style="width:33%"></b></div></div><div class="sub">1 of 3</div></div>
+  <div class="sec"><span>Your chores</span></div>
+  <div class="hero">
+   <h2>Clean the toilet</h2>
+   <div class="meta">Bathroom · 10 min · 6 steps</div>
+   <div class="row2"><div class="btn ghost">How to</div><div class="btn done">✓ Done</div></div>
+  </div>
+  <div class="sec"><span>Up for grabs</span><span>4</span></div>
+  <div class="list">
+   <div class="item"><div class="t"><div class="n">Wipe kitchen counters</div><div class="m">Kitchen · 10 min</div></div><div class="btn claim">Claim</div></div>
+   <div class="item"><div class="t"><div class="n">Take out the trash</div><div class="m">Kitchen · 5 min</div></div><div class="btn claim">Claim</div></div>
+   <div class="item"><div class="t"><div class="n">Vacuum the living room</div><div class="m">Living room · 15 min</div></div><div class="btn claim">Claim</div></div>
+   <div class="item"><div class="t"><div class="n">Change cat water</div><div class="m">Around the house · 5 min</div></div><div class="btn claim">Claim</div></div>
+  </div>
+  <div class="sec"><span>Others are on it</span><span>2</span></div>
+  <div class="list">
+   <div class="item"><span class="av s28 K">K</span><div class="t"><div class="n">Wash bedding</div><div class="m">Kira · Bedrooms</div></div></div>
+  </div>
+ </div>
+ <div class="tab"><div class="on"><div class="ic">⚡</div>Today</div><div><div class="ic">☰</div>Chores</div><div><div class="ic">⚙</div>Settings</div></div>
+</div>
+
+<!-- 2. How-to -->
+<div class="phone" id="p2">
+ <div class="status"></div>
+ <div class="scroll">
+  <div class="back">‹ Today</div>
+  <div style="padding:6px 4px 14px"><h1 style="font-size:30px;line-height:1.1">Clean the toilet</h1>
+   <div class="meta" style="display:flex;align-items:center;gap:8px;margin-top:8px"><span class="av s22 R">R</span> You're on it · Bathroom · about 10 min</div></div>
+  <div class="sec"><span>How to do it</span><span>2 of 6</span></div>
+  <div class="list">
+   <div class="step ok"><div class="num ok">✓</div><p>Squirt toilet cleaner under the rim and let it sit.</p></div>
+   <div class="step ok"><div class="num ok">✓</div><p>Spray the outside: tank, handle, seat (both sides), and base.</p></div>
+   <div class="step"><div class="num">3</div><p>Wipe the outside top to bottom with paper towels.</p></div>
+   <div class="step"><div class="num">4</div><p>Scrub the bowl with the brush, especially under the rim.</p></div>
+   <div class="step"><div class="num">5</div><p>Flush with the lid down, and rinse the brush in the clean water.</p></div>
+   <div class="step"><div class="num">6</div><p>Throw away the paper towels and wash your hands.</p></div>
+  </div>
+ </div>
+ <div class="sticky"><div class="btn done" style="height:58px;font-size:20px">✓ Mark done</div><div style="text-align:center;color:var(--text2);font-weight:800;font-size:15px;margin-top:12px">Give it back</div></div>
+</div>
+
+<!-- 3. Game mode, Reagen -->
+<div class="phone arc" id="p3">
+ <div class="grid"></div>
+ <div class="status"></div>
+ <div class="scroll" style="position:relative">
+  <div class="top"><h1 style="color:#FFE14D;font-size:30px">TODAY</h1><span class="av s36 R">R</span></div>
+  <div class="card">
+   <div class="xp"><span class="lv">LV 2</span><div class="track"><b style="width:55%"></b></div></div>
+   <div class="prog-top" style="margin-top:12px"><div class="sub" style="color:#fff">5 of 12 cleared</div><div class="sub">You: 20 XP</div></div>
+   <div class="seg"><i class="D"></i><i class="R"></i><i class="B"></i><i class="K"></i><i class="K"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <div class="spin"><span>▣ 1 loot chest!</span><b>OPEN</b></div>
+  <div class="sec"><span>Your quests</span></div>
+  <div class="hero">
+   <h2>Clean the toilet</h2>
+   <div class="meta">Bathroom · +10 XP · 1 loot chest</div>
+   <div class="row2"><div class="btn ghost">How to</div><div class="btn done">✓ DONE</div></div>
+  </div>
+  <div class="sec"><span>Quests up for grabs</span><span>4</span></div>
+  <div class="list">
+   <div class="item"><div class="t"><div class="n">Wipe kitchen counters</div><div class="m">Kitchen · +10 XP</div></div><div class="btn claim">Claim</div></div>
+   <div class="item"><div class="t"><div class="n">Take out the trash</div><div class="m">Kitchen · +5 XP</div></div><div class="btn claim">Claim</div></div>
+   <div class="item"><div class="t"><div class="n">Vacuum the living room</div><div class="m">Living room · +15 XP</div></div><div class="btn claim">Claim</div></div>
+  </div>
+  <div class="sec"><span>Loot</span></div>
+  <div class="card reward"><div style="flex:1"><div style="font-weight:900;font-size:20px">$3.45 earned</div><div class="sub">$1.20 to be paid · 14 chests</div></div></div>
+ </div>
+ <div class="tab"><div class="on"><div class="ic">⚡</div>Today</div><div><div class="ic">☰</div>Chores</div><div><div class="ic">⚙</div>Settings</div></div>
+</div>
+
+
+<!-- 5. Loot chest -->
+<div class="phone arc" id="p5" style="background:linear-gradient(#0B0320,#2A0D45)">
+ <div class="grid"></div>
+ <div class="beam" style="--r:-22deg;--c:rgba(255,225,77,.55)"></div>
+ <div class="beam" style="--r:0deg;--c:rgba(61,224,255,.5)"></div>
+ <div class="beam" style="--r:22deg;--c:rgba(240,86,154,.5)"></div>
+ <div id="coins"></div>
+ <div style="position:absolute;top:64px;left:0;right:0;text-align:center" class="mono"><div style="font-size:34px;color:#FFE14D">LOOT CHEST</div></div>
+ <canvas id="chest" width="16" height="11" style="position:absolute;left:83px;top:470px;width:224px;height:154px;image-rendering:pixelated"></canvas>
+ <div class="mono" style="position:absolute;top:650px;left:0;right:0;text-align:center;font-size:64px;color:#fff;text-shadow:5px 5px 0 #000">25¢</div>
+ <div style="position:absolute;bottom:44px;left:24px;right:24px"><div class="btn" style="background:#FFE14D;color:#1b1400;height:58px;font-size:20px">OPEN NEXT · 1 LEFT</div></div>
+</div>
+<script>
+const P={o:'#1B0B33',v:'#6B3FD4',V:'#9B78F5',g:'#FFC83D',c:'#3DE0FF',y:'#FFF6B0'};
+const open=["..oooooooooooo..",".oVVVVVVVVVVVVo.",".ovvvvvvvvvvvvo.",".oooooooooooooo.","..oyyyyyyyyyyo..","oggggggggggggggo","ovvvvvvccvvvvvvo","ovgvvvvvvvvvvgvo","ovgvvvvvvvvvvgvo","oggggggggggggggo",".oooooooooooooo."];
+const x=document.getElementById('chest').getContext('2d');
+open.forEach((r,j)=>[...r].forEach((ch,i)=>{if(P[ch]){x.fillStyle=P[ch];x.fillRect(i,j,1,1)}}));
+const cs=document.getElementById('coins');let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
+const cols=['#FFE14D','#FFC83D','#fff','#3DE0FF','#F0569A','#5DFFC1'];
+for(let i=0;i<46;i++){const a=-Math.PI/2+(rnd()-.5)*2.0,d=90+rnd()*330;const el=document.createElement('i');const sz=rnd()<.3?14:10;
+ el.style.cssText=`position:absolute;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};box-shadow:3px 3px 0 rgba(0,0,0,.45);left:${Math.round((195+Math.cos(a)*d)/5)*5}px;top:${Math.round((500+Math.sin(a)*d)/5)*5}px`;cs.appendChild(el)}
+</script>
+<!-- 4. Settings (Kira) light -->
+<div class="phone light" id="p4">
+ <div class="status"></div>
+ <div class="scroll">
+  <div class="top"><h1>Settings</h1></div>
+  <div class="card reward"><span class="av s44 K">K</span><div style="flex:1"><div style="font-weight:900;font-size:19px">Kira</div><div class="sub">Using this phone</div></div><div class="pill" style="font-size:14px;padding:8px 14px;color:var(--text)">Switch</div></div>
+  <div class="sec"><span>Game mode</span></div>
+  <div class="list">
+   <div class="item"><div class="t"><div class="n">Game mode</div><div class="m">Arcade TV, XP, and loot chests for Reagen</div></div><div class="toggle"></div></div>
+   <div class="item"><div class="t"><div class="n">Music on the TV</div><div class="m">Sound effects stay on either way</div></div><div class="toggle off"></div></div>
+   <div class="item"><div class="t"><div class="n">Arcade look on this phone</div></div><div class="toggle off"></div></div>
+   <div class="item"><div class="t"><div class="n">Prize pot</div><div class="m">5¢ to $1, rare $5 jackpot</div></div><div class="sub">›</div></div>
+  </div>
+  <div class="sec"><span>Reagen's winnings</span></div>
+  <div class="card"><div class="reward"><span class="av s36 R">R</span><div style="flex:1"><div style="font-weight:900;font-size:19px">$1.20 to pay</div><div class="sub">$2.25 paid so far · 14 chests</div></div></div>
+   <div class="btn done" style="margin-top:14px;height:46px">Mark $1.20 paid</div></div>
+  <div class="sec"><span>Chores</span></div>
+  <div class="list">
+   <div class="item"><div class="t"><div class="n">Show chore times</div></div><div class="toggle"></div></div>
+   <div class="item"><div class="t"><div class="n" style="color:#D63B3B">Remove the starter chores</div></div></div>
+  </div>
+ </div>
+ <div class="tab"><div><div class="ic">⚡</div>Today</div><div><div class="ic">☰</div>Chores</div><div class="on"><div class="ic">⚙</div>Settings</div></div>
+</div>
+
+<!-- TV running -->
+<div class="tv" id="t1">
+ <div class="tvhead"><div class="tvcount">5 <small>of 12 done</small></div>
+  <div class="tvseg"><i class="D"></i><i class="R"></i><i class="B"></i><i class="K"></i><i class="K"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="tvtimer">18:42</div></div>
+ <div class="tvbody">
+  <div class="tvgrid">
+   <div class="tile dn"><span class="av s56 D">B</span><div class="n">Clean the bathroom sink and mirror</div><span class="chk">✓</span></div>
+   <div class="tile go" style="border-left-color:var(--reagen)"><span class="av s56 R">R</span><div class="n">Clean the toilet</div></div>
+   <div class="tile dn"><span class="av s56 R">R</span><div class="n">Bathroom towels and floor</div><span class="chk">✓</span></div>
+   <div class="tile"><div class="n">Wipe kitchen counters</div></div>
+   <div class="tile dn"><span class="av s56 B">B</span><div class="n">Load the dishwasher</div><span class="chk">✓</span></div>
+   <div class="tile"><div class="n">Take out the trash</div></div>
+   <div class="tile go" style="border-left-color:var(--braden)"><span class="av s56 D">B</span><div class="n">Sweep the kitchen floor</div></div>
+   <div class="tile"><div class="n">Vacuum the living room</div></div>
+   <div class="tile dn"><span class="av s56 K">K</span><div class="n">Clean end tables</div><span class="chk">✓</span></div>
+   <div class="tile go" style="border-left-color:var(--kira)"><span class="av s56 K">K</span><div class="n">Wash bedding</div></div>
+   <div class="tile dn"><span class="av s56 K">K</span><div class="n">Clean high chair</div><span class="chk">✓</span></div>
+   <div class="tile"><div class="n">Change cat water</div></div>
+  </div>
+  <div class="people">
+   <div class="lane"><span class="av s84 B">B</span><div><div class="who">Brandon</div><div class="what">Free to grab one</div></div><div class="cnt"><b>1</b><span>done</span></div></div>
+   <div class="lane"><span class="av s84 K">K</span><div><div class="who">Kira</div><div class="what">On <b>Wash bedding</b></div></div><div class="cnt"><b>2</b><span>done</span></div></div>
+   <div class="lane"><span class="av s84 D">B</span><div><div class="who">Braden</div><div class="what">On <b>Sweep the kitchen floor</b></div></div><div class="cnt"><b>1</b><span>done</span></div></div>
+   <div class="lane"><span class="av s84 R">R</span><div><div class="who">Reagen</div><div class="what">On <b>Clean the toilet</b><br>1 of 3 toward $20</div></div><div class="cnt"><b>1</b><span>done</span></div></div>
+  </div>
+ </div>
+</div>
+
+<!-- TV game -->
+<div class="tv tvarc" id="t2">
+ <div class="grid"></div>
+ <div class="tvhead" style="position:relative"><div class="tvcount">LV 2</div>
+  <div class="tvxp"><b></b></div>
+  <div class="tvcount" style="color:#fff;font-size:56px">5 <small>of 12 cleared</small></div></div>
+ <div class="tvbody" style="position:relative">
+  <div class="tvgrid">
+   <div class="tile dn"><span class="av s56 D">B</span><div class="n">Clean the bathroom sink and mirror</div><span class="chk">✓</span></div>
+   <div class="tile go" style="border-left-color:var(--reagen)"><span class="av s56 R">R</span><div class="n">Clean the toilet</div></div>
+   <div class="tile dn"><span class="av s56 R">R</span><div class="n">Bathroom towels and floor</div><span class="chk">✓</span></div>
+   <div class="tile"><div class="n">Wipe kitchen counters</div></div>
+   <div class="tile dn"><span class="av s56 B">B</span><div class="n">Load the dishwasher</div><span class="chk">✓</span></div>
+   <div class="tile"><div class="n">Take out the trash</div></div>
+   <div class="tile go" style="border-left-color:var(--braden)"><span class="av s56 D">B</span><div class="n">Sweep the kitchen floor</div></div>
+   <div class="tile"><div class="n">Vacuum the living room</div></div>
+   <div class="tile dn"><span class="av s56 K">K</span><div class="n">Clean end tables</div><span class="chk">✓</span></div>
+   <div class="tile go" style="border-left-color:var(--kira)"><span class="av s56 K">K</span><div class="n">Wash bedding</div></div>
+   <div class="tile dn"><span class="av s56 K">K</span><div class="n">Clean high chair</div><span class="chk">✓</span></div>
+   <div class="tile"><div class="n">Change cat water</div></div>
+  </div>
+  <div class="people">
+   <div class="lane"><span class="av s84 B">B</span><div><div class="who">BRANDON</div><div class="what">Free to grab one</div></div><div class="cnt"><b style="color:#5DFFC1">10</b><span>XP</span></div></div>
+   <div class="lane"><span class="av s84 K">K</span><div><div class="who">KIRA</div><div class="what">On <b>Wash bedding</b></div></div><div class="cnt"><b style="color:#5DFFC1">20</b><span>XP</span></div></div>
+   <div class="lane"><span class="av s84 D">B</span><div><div class="who">BRADEN</div><div class="what">On <b>Sweep the kitchen floor</b></div></div><div class="cnt"><b style="color:#5DFFC1">10</b><span>XP</span></div></div>
+   <div class="lane"><span class="av s84 R">R</span><div><div class="who">REAGEN</div><div class="what">On <b>Clean the toilet</b><br>▣ 1 chest to open</div></div><div class="cnt"><b style="color:#5DFFC1">20</b><span>XP</span></div></div>
+  </div>
+ </div>
+</div>
+</body></html>

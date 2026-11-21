@@ -5,124 +5,169 @@ import SwiftUI
 struct BlitzTab: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
-    var showTimes: Bool { store.showTimes }
     @State private var showingStart = false
     @State private var editingList = false
+    @State private var confirmingEnd = false
+    @State private var path: [UUID] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if let blitz = store.state?.runningBlitz {
-                    RunningBlitzView(me: me, blitz: blitz)
+                    RunningBlitzView(me: me, blitz: blitz,
+                                     editList: { editingList = true }, end: { confirmingEnd = true })
                 } else {
                     IdleView(me: me, lastBlitz: store.state?.blitz) { showingStart = true }
                 }
             }
-            .navigationTitle("Today")
-            .toolbar {
-                if me.isParent, store.state?.runningBlitz != nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Edit list") { editingList = true }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("End", role: .destructive) {
-                            store.run { try $0.endBlitz(by: me, now: .now) }
-                        }
-                    }
-                }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: UUID.self) { id in
+                TaskDetailView(me: me, taskID: id)
             }
             .onAppear {
                 if debugScreen == "start" { showingStart = true }
                 if debugScreen == "edit" { editingList = true }
+                if debugScreen == "detail", let blitz = store.state?.runningBlitz {
+                    let mine = blitz.tasks.first { $0.claimedBy == me && $0.doneAt == nil }
+                    if let task = mine ?? blitz.tasks(in: .open).first { path = [task.id] }
+                }
             }
             .sheet(isPresented: $showingStart) { StartBlitzView(me: me) }
             .sheet(isPresented: $editingList) { EditListView(me: me) }
+            .confirmationDialog("End today's list?", isPresented: $confirmingEnd, titleVisibility: .visible) {
+                Button("End the list", role: .destructive) {
+                    store.run { try $0.endBlitz(by: me, now: .now) }
+                }
+            } message: {
+                Text("Chores that aren't done stay unfinished, and the TV shows the results.")
+            }
         }
     }
 }
+
+/// Small rounded button for the title row ("Edit", "End").
+struct ChipButtonStyle: ButtonStyle {
+    var danger = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        Face(danger: danger, pressed: configuration.isPressed, label: configuration.label)
+    }
+
+    private struct Face<Label: View>: View {
+        @Environment(\.skin) private var skin
+        let danger: Bool
+        let pressed: Bool
+        let label: Label
+
+        var body: some View {
+            label
+                .font(skin.body(15, .heavy))
+                .foregroundStyle(danger ? Palette.danger : skin.text)
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(skin.card, in: Capsule())
+                .opacity(pressed ? 0.6 : 1)
+        }
+    }
+}
+
+// MARK: Nothing running
 
 struct IdleView: View {
     let me: Person
     let lastBlitz: Blitz?
     let start: () -> Void
     @EnvironmentObject var store: HouseholdStore
-    var showTimes: Bool { store.showTimes }
+    @Environment(\.skin) private var skin
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                SpinBanner(me: me)
-                EarningsCard(me: me)
-                if let last = lastBlitz, last.isOver {
-                    FinishedCard(me: me, blitz: last)
+        Page(title: "Today") {
+            PersonBadge(person: me, size: 36)
+        } content: {
+            SpinBanner(me: me)
+            if me.isParent {
+                Button(action: start) {
+                    Label("Make today's list", systemImage: "plus")
                 }
+                .buttonStyle(BlitzButtonStyle(kind: .accent, height: 58))
+                .padding(.top, 4)
+            } else if lastBlitz?.isOver != true {
+                VStack(spacing: 8) {
+                    Image(systemName: "bolt.slash.fill")
+                        .font(.system(size: 34))
+                        .foregroundStyle(skin.text2)
+                    Text("Nothing to do right now").font(skin.title(20))
+                    Text("When Brandon or Kira starts a list, it shows up here.")
+                        .font(skin.body(15))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(skin.text2)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .cardBox()
+            }
+            EarningsPanel(me: me)
+            if let last = lastBlitz, last.isOver {
+                SectionLabel(text: "Last time")
+                LastTimeCard(me: me, blitz: last)
                 if me.isParent {
-                    Button(action: start) {
-                        Label("Make today's list", systemImage: "plus")
-                            .font(.title2.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    if lastBlitz?.isOver == true {
-                        Button("Clear the TV") { store.run { try $0.clearBlitz(by: me) } }
-                    }
-                } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "cup.and.saucer").font(.system(size: 44))
-                        Text("No chores going right now").font(.title3.bold())
-                        Text("When Brandon or Kira starts some, they show up here.")
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 40)
+                    Button("Clear the TV") { store.run { try $0.clearBlitz(by: me) } }
+                        .buttonStyle(BlitzButtonStyle(kind: .quiet, height: 46))
                 }
             }
-            .padding()
         }
     }
 }
 
-struct FinishedCard: View {
+/// How the last list went: the count, the colored bar, and who did what.
+struct LastTimeCard: View {
     let me: Person
     let blitz: Blitz
+    @Environment(\.skin) private var skin
 
     var body: some View {
+        let done = blitz.tasks(in: .done).count
         VStack(alignment: .leading, spacing: 12) {
-            Text("Last time: \(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
-                .font(.headline)
-            ForEach(blitz.allRewards, id: \.person) { reward in
-                RewardRow(me: me, blitz: blitz, reward: reward)
-            }
-            ForEach(blitz.doneByPerson, id: \.person) { entry in
-                HStack(alignment: .top) {
-                    PersonBadge(person: entry.person)
-                    Text(entry.tasks.map(\.name).joined(separator: ", "))
-                        .font(.subheadline)
+            VStack(alignment: .leading, spacing: 12) {
+                (Text("\(done)").font(skin.title(30))
+                    + Text(" of \(blitz.tasks.count) done").font(skin.body(16, .bold)).foregroundColor(skin.text2))
+                SegmentedProgress(tasks: blitz.tasks, track: skin.inset)
+                ForEach(blitz.doneByPerson, id: \.person) { entry in
+                    HStack(alignment: .top, spacing: 12) {
+                        PersonBadge(person: entry.person, size: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(entry.person == me ? "You" : entry.person.name) · \(entry.tasks.count)")
+                                .font(skin.body(16, .heavy))
+                            Text(entry.tasks.map(\.name).joined(separator: ", "))
+                                .font(skin.body(14))
+                                .foregroundStyle(skin.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
+            .cardBox()
+            ForEach(blitz.allRewards, id: \.person) { reward in
+                RewardCard(me: me, blitz: blitz, reward: reward)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(.green.opacity(0.12)))
     }
 }
+
+// MARK: A list is running
 
 struct RunningBlitzView: View {
     let me: Person
     let blitz: Blitz
+    let editList: () -> Void
+    let end: () -> Void
     @EnvironmentObject var store: HouseholdStore
-    var showTimes: Bool { store.showTimes }
-    @State private var selected: UUID?
-    @AppStorage("seenHint") private var seenHint = false
+    @Environment(\.skin) private var skin
     @State private var bursts: [PhoneBurst] = []
     @State private var knownLevel: Int?
     @State private var knownMyDone: Set<UUID>?
 
-    /// Game mode turns the list into an arcade screen (see ArcadePhone.swift).
     var game: Bool { store.state?.isGameMode ?? false }
-    var rowBackground: Color? { game ? Color.white.opacity(0.09) : nil }
 
     var mine: [BlitzTask] { blitz.tasks.filter { $0.claimedBy == me && $0.doneAt == nil } }
     var open: [BlitzTask] { blitz.tasks(in: .open) }
@@ -130,85 +175,46 @@ struct RunningBlitzView: View {
     var done: [BlitzTask] { blitz.tasks(in: .done) }
 
     var body: some View {
-        List {
-            if !seenHint {
-                Section {
-                    HStack(alignment: .top) {
-                        Image(systemName: "hand.tap.fill").foregroundStyle(Color.accentColor)
-                        Text("Tap **Claim** to take a chore, then **Done** when it's finished. Tap a chore's name to see how to do it.")
-                            .font(.subheadline)
-                        Spacer()
-                        Button { seenHint = true } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                            .buttonStyle(.borderless)
-                    }
-                }
+        Page(title: "Today") {
+            if me.isParent {
+                Button("Edit", action: editList).buttonStyle(ChipButtonStyle())
+                Button("End", action: end).buttonStyle(ChipButtonStyle(danger: true))
             }
-            if game {
-                Section {
-                    XPBar(blitz: blitz, size: 18)
-                        .padding(.vertical, 4)
-                }
-                .listRowBackground(Color.clear)
+            PersonBadge(person: me, size: 36)
+        } content: {
+            ProgressCard(blitz: blitz, me: me)
+            SpinBanner(me: me)
+            ForEach(blitz.allRewards, id: \.person) { reward in
+                RewardCard(me: me, blitz: blitz, reward: reward)
             }
-            Section {
-                if blitz.hasTimer {
-                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        let left = blitz.remaining(at: ctx.date) ?? 0
-                        HStack {
-                            Text(countdownText(left))
-                                .font(.system(size: 44, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(left > 0 ? Color.primary : Color.red)
-                            Spacer()
-                            Text("\(done.count) of \(blitz.tasks.count) done")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } else {
-                    HStack {
-                        Text("\(done.count) of \(blitz.tasks.count) done").font(.title2.bold())
-                        Spacer()
-                    }
-                }
-                ForEach(blitz.allRewards, id: \.person) { reward in
-                    RewardRow(me: me, blitz: blitz, reward: reward)
-                }
-                SpinBanner(me: me)
-            }
-            .listRowBackground(rowBackground)
-            WinningsSection(me: me)
+            EarningsPanel(me: me)
             if !mine.isEmpty {
-                Section {
-                    ForEach(mine) { row($0) }.listRowBackground(rowBackground)
-                } header: { header("Your chores", arcade: "Your quests") }
+                SectionLabel(text: skin.word("Your chores", "Your quests"))
+                ForEach(mine) { MyChoreCard(me: me, task: $0) }
             }
-            Section {
-                ForEach(open) { row($0) }.listRowBackground(rowBackground)
-            } header: {
-                header(open.isEmpty ? "Nothing left to grab" : "Up for grabs",
-                       arcade: open.isEmpty ? "All quests taken" : "Quests up for grabs")
+            SectionLabel(text: open.isEmpty ? skin.word("Nothing left to grab", "All quests taken")
+                                            : skin.word("Up for grabs", "Quests up for grabs"),
+                         trailing: open.isEmpty ? nil : "\(open.count)")
+            if !open.isEmpty {
+                TaskRows(me: me, tasks: open)
             }
             if !others.isEmpty {
-                Section {
-                    ForEach(others) { row($0) }.listRowBackground(rowBackground)
-                } header: { header("Others are on it", arcade: "Party members on it") }
+                SectionLabel(text: skin.word("Others are on it", "Party members on it"), trailing: "\(others.count)")
+                TaskRows(me: me, tasks: others)
             }
             if !done.isEmpty {
-                Section {
-                    ForEach(done) { row($0) }.listRowBackground(rowBackground)
-                } header: { header("Done", arcade: "Cleared") }
+                SectionLabel(text: skin.word("Done", "Cleared"), trailing: "\(done.count)")
+                TaskRows(me: me, tasks: done)
             }
         }
-        .scrollContentBackground(game ? .hidden : .automatic)
-        .background { if game { ArcadePhoneBackground() } }
-        .preferredColorScheme(game ? .dark : nil)
-        .overlay { if game { PhoneBurstLayer(bursts: bursts) } }
+        .overlay { if skin.arcade { PhoneBurstLayer(bursts: bursts) } }
         .onChange(of: Set(blitz.tasks.filter { $0.doneAt != nil && $0.claimedBy == me }.map(\.id)), initial: true) { _, now in
-            // One of my chores just got finished (here or on its detail screen).
-            if game, let known = knownMyDone {
+            // One of my chores just got finished (here or on its how-to screen).
+            if let known = knownMyDone {
                 for id in now.subtracting(known) {
-                    let minutes = blitz.tasks.first { $0.id == id }?.minutes ?? 1
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    guard game, skin.arcade else { continue }
+                    let minutes = blitz.tasks.first { $0.id == id }?.minutes ?? 1
                     GameAudio.shared.kaching()
                     GameAudio.shared.gem()
                     celebrate("+\(max(minutes, 1)) XP")
@@ -218,23 +224,12 @@ struct RunningBlitzView: View {
         }
         .onChange(of: level(forXP: familyXP(blitz)).level, initial: true) { _, lv in
             // Level-up fanfare when the family XP bar fills.
-            if game, let known = knownLevel, lv > known {
+            if game, skin.arcade, let known = knownLevel, lv > known {
                 GameAudio.shared.levelUp()
                 celebrate("LEVEL \(lv)!")
             }
             knownLevel = lv
         }
-        .onAppear {
-            if debugScreen == "detail" { selected = (mine.first ?? open.first)?.id }
-        }
-        .navigationDestination(item: $selected) { id in
-            TaskDetailView(me: me, taskID: id)
-        }
-    }
-
-    @ViewBuilder
-    func header(_ normal: String, arcade: String) -> some View {
-        if game { ArcadeHeader(text: arcade) } else { Text(normal) }
     }
 
     func celebrate(_ label: String) {
@@ -242,81 +237,122 @@ struct RunningBlitzView: View {
         bursts.append(b)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { bursts.removeAll { $0.id == b.id } }
     }
-
-    func row(_ task: BlitzTask) -> some View {
-        HStack {
-            Button { selected = task.id } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(task.name).strikethrough(task.doneAt != nil)
-                        Text(showTimes ? "\(task.room) · \(task.minutes) min" : task.room)
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if let who = task.claimedBy { PersonBadge(person: who) }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.primary)
-            if task.column == .open {
-                Button("Claim") { store.run { try $0.claim(taskID: task.id, by: me) } }
-                    .buttonStyle(.borderedProminent)
-            } else if task.column == .inProgress && (task.claimedBy == me || me.isParent) {
-                Button("Done") {
-                    store.run { try $0.markDone(taskID: task.id, by: me, now: .now) }
-                }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-            }
-        }
-    }
 }
 
-/// The how-to for one chore, with Claim and Done.
+// MARK: One chore
+
+/// The how-to for one chore: a checklist of steps and one big button.
 struct TaskDetailView: View {
     let me: Person
     let taskID: UUID
     @EnvironmentObject var store: HouseholdStore
-    var showTimes: Bool { store.showTimes }
+    @Environment(\.skin) private var skin
+    @Environment(\.dismiss) private var dismiss
     @State private var checked: Set<Int> = []
 
     var task: BlitzTask? { store.state?.blitz?.tasks.first { $0.id == taskID } }
 
     var body: some View {
-        if let task {
-            List {
-                Section {
-                    HStack {
-                        Text(showTimes ? "\(task.room) · about \(task.minutes) min" : task.room)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        if let who = task.claimedBy {
-                            PersonBadge(person: who)
-                            Text(who == me ? "You" : who.name)
+        Group {
+            if let task {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(task.name)
+                            .font(skin.title(30))
+                            .foregroundStyle(skin.arcade ? skin.accent : skin.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            if let who = task.claimedBy { PersonBadge(person: who, size: 24) }
+                            Text(status(task)).font(skin.body(15)).foregroundStyle(skin.text2)
+                        }
+                        if task.steps.isEmpty {
+                            Text("No steps written for this one yet. Ask Brandon or Kira if you're not sure how.")
+                                .font(skin.body(16))
+                                .foregroundStyle(skin.text2)
+                                .cardBox()
+                                .padding(.top, 8)
+                        } else {
+                            SectionLabel(text: "How to do it", trailing: "\(checked.count) of \(task.steps.count)")
+                            steps(task)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                    .frame(maxWidth: 640, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                 }
-                Section("How to do it") {
-                    ForEach(Array(task.steps.enumerated()), id: \.offset) { i, step in
-                        Button {
-                            if checked.contains(i) { checked.remove(i) } else { checked.insert(i) }
-                        } label: {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: checked.contains(i) ? "checkmark.circle.fill" : "\(i + 1).circle")
-                                    .foregroundStyle(checked.contains(i) ? Color.green : Color.accentColor)
-                                    .font(.title3)
-                                Text(step).foregroundStyle(.primary)
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 4) { actions(task) }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 8)
+                        .frame(maxWidth: 640)
+                        .frame(maxWidth: .infinity)
+                        .background(skin.bg.opacity(skin.arcade ? 0.9 : 1))
+                }
+            } else {
+                Text("This chore isn't on the list anymore.")
+                    .font(skin.body(16))
+                    .foregroundStyle(skin.text2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .foregroundStyle(skin.text)
+        .background { PageBackground() }
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    func status(_ task: BlitzTask) -> String {
+        var parts: [String] = []
+        if let who = task.claimedBy {
+            parts.append(who == me ? (task.doneAt == nil ? "You're on it" : "You did this") : who.name)
+        }
+        parts.append(task.room)
+        if store.showTimes { parts.append("about \(task.minutes) min") }
+        return parts.joined(separator: " · ")
+    }
+
+    func steps(_ task: BlitzTask) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(task.steps.enumerated()), id: \.offset) { i, step in
+                if i > 0 {
+                    Rectangle().fill(skin.line).frame(height: 1).padding(.leading, 60)
+                }
+                Button {
+                    if checked.contains(i) { checked.remove(i) } else { checked.insert(i) }
+                } label: {
+                    HStack(alignment: .top, spacing: 14) {
+                        ZStack {
+                            if checked.contains(i) {
+                                Circle().fill(Palette.done)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 14, weight: .black))
+                                    .foregroundStyle(Palette.onDone)
+                            } else {
+                                Circle().strokeBorder(skin.accentText, lineWidth: 2)
+                                Text("\(i + 1)")
+                                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(skin.accentText)
                             }
                         }
+                        .frame(width: 30, height: 30)
+                        Text(step)
+                            .font(skin.body(17))
+                            .strikethrough(checked.contains(i))
+                            .foregroundStyle(checked.contains(i) ? skin.text2 : skin.text)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 4)
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+                    .contentShape(Rectangle())
                 }
-                Section { actions(task) }
+                .buttonStyle(.plain)
             }
-            .navigationTitle(task.name)
-        } else {
-            Text("This chore isn't in the blitz anymore.").foregroundStyle(.secondary)
         }
+        .background(skin.card, in: RoundedRectangle(cornerRadius: skin.corner, style: .continuous))
     }
 
     @ViewBuilder
@@ -325,64 +361,65 @@ struct TaskDetailView: View {
         switch task.column {
         case .open:
             Button("Claim this chore") { store.run { try $0.claim(taskID: taskID, by: me) } }
-                .font(.headline)
-            Button("Mark done") { store.run { try $0.markDone(taskID: taskID, by: me, now: .now) } }
+                .buttonStyle(BlitzButtonStyle(kind: .accent, height: 56))
+            Button("I already did it") { finish() }
+                .buttonStyle(QuietTextButtonStyle())
         case .inProgress:
             if canAct {
-                Button("Mark done") { store.run { try $0.markDone(taskID: taskID, by: me, now: .now) } }
-                    .font(.headline)
-                Button("Give it back", role: .destructive) {
-                    store.run { try $0.unclaim(taskID: taskID, by: me) }
+                Button { finish() } label: { Label("Mark done", systemImage: "checkmark") }
+                    .buttonStyle(BlitzButtonStyle(kind: .done, height: 56))
+                // A chore a parent assigned can only be handed back by a parent.
+                if task.assignedTo == nil || me.isParent {
+                    Button(task.claimedBy == me ? "Give it back" : "Take it off \(task.claimedBy?.name ?? "them")") {
+                        store.run { try $0.unclaim(taskID: taskID, by: me) }
+                    }
+                    .buttonStyle(QuietTextButtonStyle())
                 }
             } else {
-                Text("\(task.claimedBy!.name) is on this one.").foregroundStyle(.secondary)
+                Text("\(task.claimedBy?.name ?? "Someone") is on this one.")
+                    .font(skin.body(16, .bold))
+                    .foregroundStyle(skin.text2)
+                    .frame(height: 56)
             }
         case .done:
-            Label("Done", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+            Label("Done", systemImage: "checkmark.seal.fill")
+                .font(skin.body(18, .heavy))
+                .foregroundStyle(Palette.done)
+                .frame(height: 44)
             if canAct {
                 Button("Not done yet") { store.run { try $0.markNotDone(taskID: taskID, by: me) } }
+                    .buttonStyle(QuietTextButtonStyle())
             }
+        }
+    }
+
+    /// Marks it done and goes back to the list.
+    func finish() {
+        Task {
+            let ok = await store.apply { try $0.markDone(taskID: taskID, by: me, now: .now) }
+            if ok { dismiss() }
         }
     }
 }
 
-/// Shows a reward's progress. Parents get "Mark paid" once it's earned.
-struct RewardRow: View {
-    let me: Person
-    let blitz: Blitz
-    let reward: Reward
-    @EnvironmentObject var store: HouseholdStore
-    var showTimes: Bool { store.showTimes }
+/// A plain text button under a big one ("Give it back").
+struct QuietTextButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Face(pressed: configuration.isPressed, label: configuration.label)
+    }
 
-    var body: some View {
-        let mine = blitz.assignedTasks(for: reward.person)
-        let done = mine.filter { $0.doneAt != nil }.count
-        let earned = blitz.hasEarned(reward)
-        let who = reward.person == me ? "You" : reward.person.name
-        HStack(spacing: 12) {
-            PersonBadge(person: reward.person)
-            VStack(alignment: .leading, spacing: 2) {
-                if earned {
-                    Text(reward.paidAt != nil ? "\(who) earned \(reward.prize) · paid" : "\(who) earned \(reward.prize)!")
-                        .font(.headline)
-                } else {
-                    Text(reward.person == me
-                         ? "Finish your \(mine.count) chores to earn \(reward.prize)"
-                         : "\(reward.person.name): finish \(mine.count) chores for \(reward.prize)")
-                        .font(.headline)
-                    ProgressView(value: Double(done), total: Double(max(mine.count, 1)))
-                        .tint(reward.person.color)
-                }
-            }
-            Spacer()
-            if earned && reward.paidAt == nil && me.isParent {
-                Button("Mark paid") {
-                    store.run { try $0.markRewardPaid(for: reward.person, by: me, now: .now) }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            }
+    private struct Face<Label: View>: View {
+        @Environment(\.skin) private var skin
+        let pressed: Bool
+        let label: Label
+
+        var body: some View {
+            label
+                .font(skin.body(15, .heavy))
+                .foregroundStyle(skin.text2)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .contentShape(Rectangle())
+                .opacity(pressed ? 0.5 : 1)
         }
-        .padding(.vertical, 4)
     }
 }

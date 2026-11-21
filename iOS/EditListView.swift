@@ -6,6 +6,7 @@ struct EditListView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.skin) private var skin
     @State private var newName = ""
     @State private var newRoom = ""
     @State private var showSaved = false
@@ -24,7 +25,7 @@ struct EditListView: View {
                             Text(task.name)
                             Spacer()
                             if let who = task.claimedBy { PersonBadge(person: who, size: 22) }
-                            if task.doneAt != nil { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
+                            if task.doneAt != nil { Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.done) }
                         }
                     }
                     .onDelete { offsets in
@@ -36,9 +37,7 @@ struct EditListView: View {
                             .focused($typing)
                             .submitLabel(.done)
                             .onSubmit(addTyped)
-                        Menu {
-                            ForEach(rooms, id: \.self) { r in Button(r) { newRoom = r } }
-                        } label: { Text(newRoom).font(.subheadline) }
+                        RoomChip(rooms: rooms, room: $newRoom)
                         Button(action: addTyped) { Image(systemName: "plus.circle.fill").font(.title2) }
                             .buttonStyle(.borderless)
                             .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -48,6 +47,7 @@ struct EditListView: View {
                 } footer: {
                     Text("Swipe left on a chore to take it off.")
                 }
+                .listRowBackground(skin.card)
                 Section {
                     DisclosureGroup("Add from saved chores", isExpanded: $showSaved) {
                         ForEach(saved.filter { c in !tasks.contains { $0.choreID == c.id } }) { chore in
@@ -64,7 +64,9 @@ struct EditListView: View {
                         }
                     }
                 }
+                .listRowBackground(skin.card)
             }
+            .skinnedList()
             .navigationTitle("Edit list")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

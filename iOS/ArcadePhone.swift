@@ -10,8 +10,7 @@ struct ArcadePhoneBackground: View {
         TimelineView(.periodic(from: .now, by: 0.6)) { ctx in
             Canvas { g, size in
                 g.fill(Path(CGRect(origin: .zero, size: size)),
-                       with: .linearGradient(Gradient(colors: [Color(red: 0.06, green: 0.02, blue: 0.14),
-                                                               Color(red: 0.16, green: 0.05, blue: 0.27)]),
+                       with: .linearGradient(Gradient(colors: [Palette.arcadeTop, Palette.arcadeBottom]),
                                              startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
                 let cell: CGFloat = 24
                 var grid = Path()
@@ -32,16 +31,6 @@ struct ArcadePhoneBackground: View {
             }
         }
         .ignoresSafeArea()
-    }
-}
-
-/// Arcade-style section header: chunky monospaced caps in yellow.
-struct ArcadeHeader: View {
-    let text: String
-    var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 15, weight: .black, design: .monospaced))
-            .foregroundStyle(.yellow)
     }
 }
 

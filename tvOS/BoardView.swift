@@ -3,32 +3,40 @@ import SwiftUI
 import UIKit
 
 /// The living-room board. Read-only: everything is controlled from phones.
+///
+/// One grid shows every chore in list order. A chore doesn't move when it's
+/// claimed or finished; it changes look in place, so the board stays calm.
+/// The panel on the right has a lane for each person.
 struct BoardView: View {
     @EnvironmentObject var store: HouseholdStore
     var game: Bool { store.state?.isGameMode ?? false }
+    var running: Bool { store.state?.runningBlitz != nil }
+    var musicOn: Bool { game && running && (store.state?.isMusicOn ?? true) }
 
     var body: some View {
         ZStack {
             if game {
                 ArcadeBackground().ignoresSafeArea()
             } else {
-                LinearGradient(colors: [Color(red: 0.07, green: 0.09, blue: 0.16), Color(red: 0.10, green: 0.14, blue: 0.24)],
+                LinearGradient(colors: [Color(uiColor: Palette.hex(0x0A0F1C)), Color(uiColor: Palette.hex(0x141B30))],
                                startPoint: .top, endPoint: .bottom)
                     .ignoresSafeArea()
             }
             content
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
             if let state = store.state, state.isGameMode {
                 GameLayer(state: state)
             }
         }
-        .onChange(of: game && store.state?.runningBlitz != nil, initial: true) { _, on in
+        .foregroundStyle(.white)
+        .environment(\.tvLook, TVLook(game: game))
+        .onChange(of: musicOn, initial: true) { _, on in
             GameAudio.shared.setMusic(on)
         }
         .preferredColorScheme(.dark)
-        .onChange(of: store.state?.runningBlitz != nil, initial: true) { _, running in
-            // Keep the TV awake while a blitz is on.
+        .onChange(of: running, initial: true) { _, running in
+            // Keep the TV awake while a list is going.
             UIApplication.shared.isIdleTimerDisabled = running
         }
     }
@@ -36,322 +44,454 @@ struct BoardView: View {
     @ViewBuilder var content: some View {
         if let state = store.state {
             if let blitz = state.runningBlitz {
-                RunningBoard(blitz: blitz, game: state.isGameMode)
+                RunningBoard(blitz: blitz, state: state)
             } else if let last = state.blitz, last.isOver {
-                FinishedBoard(blitz: last)
+                FinishedBoard(blitz: last, state: state)
             } else {
-                IdleBoard(choreCount: state.chores.count)
+                IdleBoard(state: state)
             }
         } else if store.isLoading {
             ProgressView()
         } else {
-            VStack(spacing: 20) {
-                Text("Chore Blitz").font(.system(size: 80, weight: .heavy, design: .rounded))
+            VStack(spacing: 28) {
+                Wordmark(size: 96)
                 Text(store.problem ?? "Open Chore Blitz on Brandon's or Kira's phone to set it up.")
-                    .font(.title2).foregroundStyle(.secondary)
+                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .foregroundStyle(TVLook.dim)
+                    .multilineTextAlignment(.center)
             }
         }
     }
 }
 
-struct IdleBoard: View {
-    let choreCount: Int
+/// How the TV draws itself: the normal look, or the arcade look in Game mode.
+struct TVLook: Equatable {
+    var game = false
 
-    var body: some View {
-        VStack(spacing: 30) {
-            Image(systemName: "sparkles").font(.system(size: 120)).foregroundStyle(.yellow)
-            Text("Chore Blitz").font(.system(size: 96, weight: .heavy, design: .rounded))
-            Text("Ready when you are. Start chores from your phone.")
-                .font(.title2).foregroundStyle(.secondary)
-            Text("\(choreCount) chores in the list").font(.headline).foregroundStyle(.tertiary)
-        }
+    static let dim = Color.white.opacity(0.62)
+    static let faint = Color.white.opacity(0.38)
+
+    var corner: CGFloat { game ? 8 : 24 }
+    var accent: Color { game ? Palette.arcadeYellow : Palette.accent }
+
+    func title(_ size: CGFloat) -> Font {
+        game ? .system(size: size * 0.9, weight: .black, design: .monospaced)
+             : .system(size: size, weight: .heavy, design: .rounded)
+    }
+
+    func text(_ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
+    }
+
+    /// Big numbers: monospaced in Game mode, rounded otherwise.
+    func number(_ size: CGFloat) -> Font {
+        game ? .system(size: size, weight: .black, design: .monospaced)
+             : .system(size: size, weight: .heavy, design: .rounded)
+    }
+
+    func name(_ person: Person) -> String { game ? person.name.uppercased() : person.name }
+}
+
+private struct TVLookKey: EnvironmentKey {
+    static let defaultValue = TVLook()
+}
+
+extension EnvironmentValues {
+    var tvLook: TVLook {
+        get { self[TVLookKey.self] }
+        set { self[TVLookKey.self] = newValue }
     }
 }
+
+/// The yellow bolt and the app's name.
+struct Wordmark: View {
+    @Environment(\.tvLook) private var look
+    var size: CGFloat = 96
+
+    var body: some View {
+        HStack(spacing: size * 0.18) {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: size * 0.8, weight: .black))
+                .foregroundStyle(look.accent)
+            Text(look.game ? "CHORE BLITZ" : "Chore Blitz")
+                .font(look.title(size))
+        }
+        .fixedSize()
+    }
+}
+
+// MARK: Running
 
 struct RunningBoard: View {
     let blitz: Blitz
-    var game = false
+    let state: HouseholdState
+    @Environment(\.tvLook) private var look
+
+    var doneCount: Int { blitz.tasks(in: .done).count }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Reward pills sit in the header when there's room, so the
-            // cards keep their height; otherwise they get their own row.
-            ViewThatFits(in: .horizontal) {
-                header(inlineRewards: true)
-                VStack(alignment: .leading, spacing: 24) {
-                    header(inlineRewards: false)
-                    rewards
-                }
-            }
-            if game {
-                XPBar(blitz: blitz)
-            } else {
-                ProgressView(value: Double(blitz.tasks(in: .done).count), total: Double(max(blitz.tasks.count, 1)))
-                    .tint(.green)
-                    .scaleEffect(x: 1, y: 3, anchor: .center)
-            }
-            GeometryReader { geo in
-                let widths = columnWidths(total: geo.size.width)
-                HStack(alignment: .top, spacing: Self.columnSpacing) {
-                    ForEach(Array(TaskColumn.allCases.enumerated()), id: \.element) { i, col in
-                        BoardColumn(column: col, tasks: blitz.tasks(in: col))
-                            .frame(width: widths[i])
-                    }
-                }
-                .frame(height: geo.size.height, alignment: .top)
-                .animation(.easeInOut(duration: 0.4), value: widths)
+        VStack(alignment: .leading, spacing: 30) {
+            header
+            HStack(alignment: .top, spacing: 40) {
+                ChoreGrid(tasks: blitz.tasks)
+                PeoplePanel(blitz: blitz, state: state)
+                    .frame(width: 580)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    static let columnSpacing: CGFloat = 40
-
-    @ViewBuilder var rewards: some View {
-        if !blitz.allRewards.isEmpty {
-            HStack(spacing: 24) {
-                ForEach(blitz.allRewards, id: \.person) { RewardPill(blitz: blitz, reward: $0) }
+    var header: some View {
+        HStack(alignment: .center, spacing: 40) {
+            if look.game {
+                XPBar(blitz: blitz, size: 64)
+                count(word: "cleared")
+            } else {
+                count(word: "done")
+                SegmentedProgress(tasks: blitz.tasks, height: 24, track: Color.white.opacity(0.12))
             }
-        }
-    }
-
-    func header(inlineRewards: Bool) -> some View {
-        HStack(alignment: .center, spacing: 0) {
-            Text("Chore Blitz").font(.system(size: 56, weight: .heavy, design: .rounded))
-                .fixedSize()
-            if inlineRewards {
-                rewards.fixedSize().padding(.leading, 40)
-            }
-            Spacer(minLength: 40)
-            Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) done")
-                .font(.title2).foregroundStyle(.secondary)
-                .fixedSize()
             if blitz.hasTimer {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
                     let left = blitz.remaining(at: ctx.date) ?? 0
                     Text(countdownText(left))
-                        .font(.system(size: 110, weight: .bold, design: .rounded))
+                        .font(look.number(look.game ? 84 : 104))
                         .monospacedDigit()
-                        .foregroundStyle(left > 0 ? (left < 300 ? Color.yellow : Color.white) : Color.red)
+                        .foregroundStyle(left > 0 ? (left < 300 ? look.accent : Color.white) : Palette.danger)
                         .fixedSize()
                 }
-                .padding(.leading, 40)
             }
         }
+        .frame(height: 110)
     }
 
-    /// Every column gets a minimum width; the rest is shared by how many
-    /// chores each holds, so a fresh blitz's long Open column gets room.
-    func columnWidths(total: CGFloat) -> [CGFloat] {
-        let counts = TaskColumn.allCases.map { CGFloat(blitz.tasks(in: $0).count) }
-        let usable = total - Self.columnSpacing * CGFloat(counts.count - 1)
-        let base = min(400, usable / CGFloat(counts.count))
-        let extra = usable - base * CGFloat(counts.count)
-        let sum = counts.reduce(0, +)
-        return counts.map { base + (sum > 0 ? extra * $0 / sum : extra / CGFloat(counts.count)) }
+    /// "5 of 12 done"
+    func count(word: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 18) {
+            Text("\(doneCount)")
+                .font(look.number(look.game ? 72 : 104))
+                .contentTransition(.numericText())
+            Text("of \(blitz.tasks.count) \(word)")
+                .font(look.title(42))
+                .foregroundStyle(TVLook.dim)
+        }
+        .fixedSize()
+        .animation(.easeOut(duration: 0.4), value: doneCount)
     }
 }
 
-struct BoardColumn: View {
-    let column: TaskColumn
+/// Every chore on the list, in order, sized so the whole list always fits.
+struct ChoreGrid: View {
     let tasks: [BlitzTask]
 
-    var accent: Color {
-        switch column {
-        case .open: return .gray
-        case .inProgress: return .yellow
-        case .done: return .green
-        }
+    static func columns(for count: Int) -> Int {
+        if count <= 6 { return 1 }
+        if count <= 16 { return 2 }
+        return 3
     }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Circle().fill(accent).frame(width: 18, height: 18)
-                Text(column.title).font(.title2.bold())
-                Text("\(tasks.count)").font(.title2).foregroundStyle(.secondary)
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            // Use the roomiest card size that fits the column's real height;
-            // long columns (a fresh blitz) fall back to single-line rows that
-            // are sized to always fit.
-            ViewThatFits(in: .vertical) {
-                cards(.full)
-                cards(.compact)
-                TightCards(column: column, tasks: tasks)
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    enum Density { case full, compact }
-
-    func cards(_ density: Density) -> some View {
-        let full = density == .full
-        return VStack(alignment: .leading, spacing: full ? 14 : 10) {
-            ForEach(tasks) { task in
-                HStack(alignment: .center, spacing: 18) {
-                    if let who = task.claimedBy {
-                        PersonBadge(person: who, size: full ? 56 : 44)
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(task.name)
-                            .font(full ? .title2.weight(.semibold) : .title3.weight(.semibold))
-                            .foregroundStyle(column == .done ? Color.white.opacity(0.75) : Color.white)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.8)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if full {
-                            Text(BoardColumn.subtitle(task))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                    if column == .done {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: full ? 40 : 34))
-                            .foregroundStyle(.green)
-                    }
-                }
-                .padding(.horizontal, full ? 20 : 16)
-                .padding(.vertical, full ? 16 : 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .modifier(CardBackground(column: column, task: task))
-            }
-        }
-    }
-
-    static func subtitle(_ task: BlitzTask) -> String {
-        if let who = task.claimedBy { return "\(who.name) · \(task.room)" }
-        return task.room
-    }
-}
-
-/// Rows sized from the space available so a long column is never cut off.
-/// When the column is wide enough it splits into two sub-columns.
-struct TightCards: View {
-    let column: TaskColumn
-    let tasks: [BlitzTask]
 
     var body: some View {
         GeometryReader { geo in
-            let spacing: CGFloat = 10
-            let split = tasks.count > 5 && geo.size.width >= 760
-            let perCol = split ? (tasks.count + 1) / 2 : max(tasks.count, 1)
-            let rows = CGFloat(perCol)
-            let row = min(110, max(36, (geo.size.height - spacing * (rows - 1)) / rows))
-            let font = min(38, max(22, row * 0.36))
-            let twoLines = row >= font * 2.5
-            let halves = split ? [Array(tasks.prefix(perCol)), Array(tasks.dropFirst(perCol))] : [tasks]
+            let cols = Self.columns(for: tasks.count)
+            let rows = max(1, Int((Double(tasks.count) / Double(cols)).rounded(.up)))
+            let gap: CGFloat = rows > 8 ? 10 : 14
+            let rowHeight = min(132, max(44, (geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(rows)))
+            let chunks = stride(from: 0, to: tasks.count, by: rows).map { Array(tasks[$0..<min($0 + rows, tasks.count)]) }
             HStack(alignment: .top, spacing: 14) {
-                ForEach(halves.indices, id: \.self) { h in
-                    VStack(alignment: .leading, spacing: spacing) {
-                        ForEach(halves[h]) { task in
-                            card(task, height: row, font: font, lines: twoLines ? 2 : 1)
+                ForEach(Array(chunks.enumerated()), id: \.offset) { _, chunk in
+                    VStack(spacing: gap) {
+                        ForEach(chunk) { task in
+                            ChoreCard(task: task, height: rowHeight, roomy: cols < 3)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
                 }
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
     }
+}
 
-    func card(_ task: BlitzTask, height: CGFloat, font: CGFloat, lines: Int) -> some View {
-        HStack(spacing: 14) {
+/// One chore on the board. Open is bright, in progress carries its person's
+/// color, done fades back with a check.
+struct ChoreCard: View {
+    let task: BlitzTask
+    let height: CGFloat
+    /// Wide enough for extras (XP in Game mode).
+    var roomy = true
+    @Environment(\.tvLook) private var look
+
+    var body: some View {
+        let done = task.doneAt != nil
+        let working = !done && task.claimedBy != nil
+        let font = min(40, max(22, height * 0.31))
+        let twoLines = height >= font * 2.7
+        HStack(spacing: font * 0.5) {
             if let who = task.claimedBy {
-                PersonBadge(person: who, size: min(56, font * 1.3))
+                PersonBadge(person: who, size: min(58, height * 0.52))
+                    .opacity(done ? 0.75 : 1)
             }
             Text(task.name)
-                .font(.system(size: font, weight: .semibold))
-                .foregroundStyle(column == .done ? Color.white.opacity(0.75) : Color.white)
-                .lineLimit(lines)
-                .minimumScaleFactor(0.7)
+                .font(look.text(font, .bold))
+                .strikethrough(done, color: Color.white.opacity(0.5))
+                .foregroundStyle(done ? Color.white.opacity(0.45) : Color.white)
+                .lineLimit(twoLines ? 2 : 1)
+                .minimumScaleFactor(0.65)
             Spacer(minLength: 0)
-            if column == .done {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: font))
-                    .foregroundStyle(.green)
+            if done {
+                Image(systemName: "checkmark")
+                    .font(.system(size: font * 0.8, weight: .black))
+                    .foregroundStyle(Palette.done)
+            } else if look.game && roomy {
+                Text("+\(max(task.minutes, 1)) XP")
+                    .font(.system(size: font * 0.62, weight: .black, design: .monospaced))
+                    .foregroundStyle(Palette.arcadeMint.opacity(working ? 1 : 0.7))
+                    .fixedSize()
             }
         }
-        .padding(.horizontal, 18)
+        .padding(.leading, font * 0.85)
+        .padding(.trailing, font * 0.7)
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .leading)
-        .modifier(CardBackground(column: column, task: task, corner: 16))
+        .background(Color.white.opacity(done ? 0.05 : (working ? 0.16 : 0.10)))
+        .overlay(alignment: .leading) {
+            if working, let who = task.claimedBy {
+                Rectangle().fill(who.color).frame(width: 10)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: min(look.corner, height * 0.3), style: .continuous))
+        .animation(.easeInOut(duration: 0.35), value: task.column)
     }
 }
 
-struct CardBackground: ViewModifier {
-    let column: TaskColumn
-    let task: BlitzTask
-    var corner: CGFloat = 20
+/// A lane per person: what they're on, and how much they've finished.
+struct PeoplePanel: View {
+    let blitz: Blitz
+    let state: HouseholdState
 
-    func body(content: Content) -> some View {
-        content
-            .background(RoundedRectangle(cornerRadius: corner)
-                .fill(Color.white.opacity(column == .done ? 0.06 : 0.11)))
-            .overlay(RoundedRectangle(cornerRadius: corner)
-                .stroke(task.claimedBy?.color.opacity(column == .inProgress ? 0.9 : 0) ?? .clear, lineWidth: 4))
+    var body: some View {
+        VStack(spacing: 14) {
+            ForEach(Person.allCases) { person in
+                PersonLane(person: person, blitz: blitz, state: state)
+            }
+        }
     }
 }
+
+struct PersonLane: View {
+    let person: Person
+    let blitz: Blitz
+    let state: HouseholdState
+    @Environment(\.tvLook) private var look
+
+    var body: some View {
+        let mine = blitz.tasks.filter { $0.claimedBy == person }
+        let working = mine.filter { $0.doneAt == nil }
+        let done = mine.count - working.count
+        HStack(spacing: 24) {
+            PersonBadge(person: person, size: 84)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(look.name(person))
+                    .font(look.title(36))
+                status(working: working)
+                    .font(look.text(27))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let extra = extraLine {
+                    Text(extra)
+                        .font(look.text(25))
+                        .foregroundStyle(look.accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                Text(look.game ? "\(personXP(person, blitz))" : "\(done)")
+                    .font(look.number(60))
+                    .foregroundStyle(look.game ? Palette.arcadeMint : Color.white)
+                    .contentTransition(.numericText())
+                Text(look.game ? "XP" : "done")
+                    .font(look.text(22, .bold))
+                    .foregroundStyle(TVLook.dim)
+            }
+            .fixedSize()
+            .animation(.easeOut(duration: 0.4), value: done)
+        }
+        .padding(.horizontal, 26)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Color.white.opacity(working.isEmpty ? 0.07 : 0.11),
+                    in: RoundedRectangle(cornerRadius: look.corner, style: .continuous))
+    }
+
+    /// "On Wash bedding", or what to do next when they have nothing going.
+    func status(working: [BlitzTask]) -> Text {
+        if let first = working.first {
+            let more = working.count > 1 ? " +\(working.count - 1)" : ""
+            return Text("On ").foregroundColor(TVLook.dim) + Text(first.name + more).foregroundColor(.white)
+        }
+        // Chores a parent assigned to someone else aren't theirs to grab.
+        let open = blitz.tasks.contains { $0.column == .open && ($0.assignedTo == nil || $0.assignedTo == person) }
+        return Text(open ? "Free to grab one" : "All caught up").foregroundColor(TVLook.dim)
+    }
+
+    /// Reward progress, or chests waiting to be opened in Game mode.
+    var extraLine: String? {
+        let chests = state.spinsLeft(for: person)
+        if chests > 0 { return chests == 1 ? "1 chest to open" : "\(chests) chests to open" }
+        guard let reward = blitz.reward(for: person) else { return nil }
+        if blitz.hasEarned(reward) { return "Earned \(reward.prize)!" }
+        let assigned = blitz.assignedTasks(for: person)
+        let done = assigned.filter { $0.doneAt != nil }.count
+        return "\(done) of \(assigned.count) toward \(reward.prize)"
+    }
+}
+
+// MARK: Idle
+
+struct IdleBoard: View {
+    let state: HouseholdState
+    @Environment(\.tvLook) private var look
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            Wordmark(size: 120)
+            Text("Start today's list from your phone")
+                .font(look.text(40))
+                .foregroundStyle(TVLook.dim)
+                .padding(.top, 22)
+            HStack(spacing: 28) {
+                ForEach(Person.allCases) { person in
+                    VStack(spacing: 12) {
+                        PersonBadge(person: person, size: 96)
+                        Text(look.name(person))
+                            .font(look.text(26, .bold))
+                            .foregroundStyle(TVLook.dim)
+                    }
+                    .frame(width: 170)
+                }
+            }
+            .padding(.top, 64)
+            if let waiting = chestsWaiting {
+                Text(waiting)
+                    .font(look.title(30))
+                    .foregroundStyle(look.accent)
+                    .padding(.top, 44)
+            }
+            Spacer()
+            TimelineView(.periodic(from: .now, by: 20)) { ctx in
+                HStack(spacing: 20) {
+                    Text(ctx.date, format: .dateTime.weekday(.wide).month(.wide).day())
+                    Text(ctx.date, format: .dateTime.hour().minute())
+                        .foregroundStyle(.white)
+                }
+                .font(look.text(34, .bold))
+                .foregroundStyle(TVLook.faint)
+            }
+            .padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// "Reagen has 2 chests to open"
+    var chestsWaiting: String? {
+        for person in Person.allCases {
+            let n = state.spinsLeft(for: person)
+            if n > 0 { return "\(person.name) has \(n) chest\(n == 1 ? "" : "s") to open" }
+        }
+        return nil
+    }
+}
+
+// MARK: Finished
 
 struct FinishedBoard: View {
     let blitz: Blitz
+    let state: HouseholdState
+    @Environment(\.tvLook) private var look
 
     var body: some View {
-        VStack(spacing: 40) {
-            Text(blitz.tasks.allSatisfy { $0.doneAt != nil } ? "All done! 🎉" : "That's a wrap")
-                .font(.system(size: 100, weight: .heavy, design: .rounded))
-            Text("\(blitz.tasks(in: .done).count) of \(blitz.tasks.count) chores done")
-                .font(.title).foregroundStyle(.secondary)
-            if !blitz.allRewards.isEmpty {
-                HStack(spacing: 24) {
-                    ForEach(blitz.allRewards, id: \.person) { RewardPill(blitz: blitz, reward: $0) }
+        let done = blitz.tasks(in: .done).count
+        let all = !blitz.tasks.isEmpty && done == blitz.tasks.count
+        let people = blitz.doneByPerson
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            HStack(spacing: 26) {
+                if all {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 84, weight: .black))
+                        .foregroundStyle(look.accent)
                 }
+                Text(look.game ? (all ? "ALL CLEARED!" : "THAT'S A WRAP") : (all ? "All done!" : "That's a wrap"))
+                    .font(look.title(110))
             }
-            HStack(alignment: .top, spacing: 40) {
-                ForEach(blitz.doneByPerson, id: \.person) { entry in
-                    VStack(spacing: 16) {
-                        PersonBadge(person: entry.person, size: 90)
-                        Text(entry.person.name).font(.title2.bold())
-                        ForEach(entry.tasks) { t in
-                            Text(t.name).font(.headline).foregroundStyle(.secondary)
-                        }
+            Text("\(done) of \(blitz.tasks.count) chores done")
+                .font(look.text(38))
+                .foregroundStyle(TVLook.dim)
+                .padding(.top, 8)
+            SegmentedProgress(tasks: blitz.tasks, height: 22, track: Color.white.opacity(0.12))
+                .frame(maxWidth: 1100)
+                .padding(.top, 34)
+            if !people.isEmpty {
+                HStack(alignment: .top, spacing: 22) {
+                    ForEach(people, id: \.person) { entry in
+                        tally(entry, columns: people.count)
                     }
-                    .frame(maxWidth: 380)
                 }
+                .padding(.top, 50)
             }
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
 
-/// "Reagen · 2 of 4 → $20", or "Reagen earned $20!" once his assigned chores are done.
-struct RewardPill: View {
-    let blitz: Blitz
-    let reward: Reward
-
-    var body: some View {
-        let mine = blitz.assignedTasks(for: reward.person)
-        let done = mine.filter { $0.doneAt != nil }.count
-        let earned = blitz.hasEarned(reward)
-        HStack(spacing: 14) {
-            PersonBadge(person: reward.person, size: 44)
-            if earned {
-                Text("\(reward.person.name) earned \(reward.prize)!")
-                    .font(.title3.bold())
-                Image(systemName: reward.paidAt != nil ? "checkmark.seal.fill" : "star.fill")
-                    .foregroundStyle(.yellow)
-            } else {
-                Text("\(reward.person.name) · \(done) of \(mine.count) → \(reward.prize)")
-                    .font(.title3.weight(.semibold))
+    func tally(_ entry: PersonDone, columns: Int) -> some View {
+        let shown = entry.tasks.prefix(5)
+        let hidden = entry.tasks.count - shown.count
+        return VStack(spacing: 10) {
+            HStack(spacing: 18) {
+                PersonBadge(person: entry.person, size: 76)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(look.name(entry.person)).font(look.title(34))
+                    Text(look.game ? "\(personXP(entry.person, blitz)) XP · \(entry.tasks.count) done"
+                                   : (entry.tasks.count == 1 ? "1 chore" : "\(entry.tasks.count) chores"))
+                        .font(look.text(26, .bold))
+                        .foregroundStyle(look.game ? Palette.arcadeMint : TVLook.dim)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, 8)
+            ForEach(Array(shown)) { task in
+                Text(task.name)
+                    .font(look.text(25))
+                    .foregroundStyle(TVLook.dim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if hidden > 0 {
+                Text("and \(hidden) more")
+                    .font(look.text(25))
+                    .foregroundStyle(TVLook.faint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // The reward shows only once it's really earned.
+            if let reward = blitz.reward(for: entry.person), blitz.hasEarned(reward) {
+                HStack(spacing: 10) {
+                    Image(systemName: reward.paidAt != nil ? "checkmark.seal.fill" : "star.fill")
+                    Text(reward.paidAt != nil ? "\(reward.prize) paid" : "Earned \(reward.prize)!")
+                }
+                .font(look.text(26, .heavy))
+                .foregroundStyle(Palette.onAccent)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
+                .background(look.accent, in: Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 10)
             }
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 10)
-        .background(Capsule().fill(earned ? Color.yellow.opacity(0.25) : Color.white.opacity(0.10)))
-        .overlay(Capsule().stroke(reward.person.color.opacity(0.8), lineWidth: 3))
+        .padding(26)
+        .frame(maxWidth: columns <= 2 ? 520 : 420, alignment: .top)
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: look.corner, style: .continuous))
     }
 }
 
@@ -361,8 +501,7 @@ struct ArcadeBackground: View {
         TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
             Canvas { g, size in
                 g.fill(Path(CGRect(origin: .zero, size: size)),
-                       with: .linearGradient(Gradient(colors: [Color(red: 0.06, green: 0.02, blue: 0.14),
-                                                               Color(red: 0.14, green: 0.04, blue: 0.24)]),
+                       with: .linearGradient(Gradient(colors: [Palette.arcadeTop, Palette.arcadeBottom]),
                                              startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
                 let cell: CGFloat = 40
                 var grid = Path()

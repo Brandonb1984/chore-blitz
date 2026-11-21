@@ -6,6 +6,11 @@ func familyXP(_ blitz: Blitz) -> Int {
     blitz.tasks.filter { $0.doneAt != nil }.reduce(0) { $0 + max($1.minutes, 1) }
 }
 
+/// One person's share of the XP on this list.
+func personXP(_ person: Person, _ blitz: Blitz) -> Int {
+    blitz.tasks.filter { $0.doneAt != nil && $0.claimedBy == person }.reduce(0) { $0 + max($1.minutes, 1) }
+}
+
 func level(forXP xp: Int) -> (level: Int, into: Int, needed: Int) {
     let per = 30
     return (xp / per + 1, xp % per, per)
@@ -44,11 +49,12 @@ struct XPBar: View {
         HStack(spacing: 16) {
             Text("LV \(lv.level)")
                 .font(.system(size: size, weight: .black, design: .monospaced))
-                .foregroundStyle(.yellow)
+                .foregroundStyle(Palette.arcadeYellow)
+                .fixedSize()
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Rectangle().fill(Color.white.opacity(0.12))
-                    Rectangle().fill(LinearGradient(colors: [.cyan, .mint], startPoint: .leading, endPoint: .trailing))
+                    Rectangle().fill(LinearGradient(colors: [Palette.arcadeCyan, Palette.arcadeMint], startPoint: .leading, endPoint: .trailing))
                         .frame(width: g.size.width * CGFloat(lv.into) / CGFloat(lv.needed))
                         .animation(.easeOut(duration: 0.6), value: lv.into)
                 }

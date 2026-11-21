@@ -4,13 +4,10 @@ import SwiftUI
 struct ChoreLibraryView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    @Environment(\.skin) private var skin
     var showTimes: Bool { store.showTimes }
-    @AppStorage("me") private var meRaw = ""
-    @State private var editing: Chore?
     @State private var adding = false
     @State private var scanning = false
-    @State private var confirmingClear = false
-    @State private var editingPrizes = false
 
     var chores: [Chore] { store.state?.chores ?? [] }
     var rooms: [String] { store.state?.rooms ?? [] }
@@ -21,33 +18,44 @@ struct ChoreLibraryView: View {
                 if me.isParent {
                     Section {
                         Button { adding = true } label: {
-                            Label("New chore", systemImage: "plus.circle.fill")
-                                .font(.title3.bold())
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 6)
+                            Label("New chore", systemImage: "plus")
                         }
+                        .buttonStyle(BlitzButtonStyle(kind: .accent, height: 52))
                         if RoomScanner.canSeePhotos {
                             Button { scanning = true } label: {
-                                Label("Scan a room", systemImage: "camera.viewfinder")
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Label("Scan a room for ideas", systemImage: "camera.viewfinder")
                             }
-                        } else {
-                            Label("Update to iOS 27 to use Scan a room", systemImage: "camera.viewfinder")
-                                .foregroundStyle(.secondary)
+                            .buttonStyle(BlitzButtonStyle(kind: .quiet, height: 46))
+                        }
+                    } footer: {
+                        if !RoomScanner.canSeePhotos {
+                            Text("Scan a room needs iOS 27 on this phone.")
                         }
                     }
+                    .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+                if chores.isEmpty {
+                    Section {
+                        Text(me.isParent ? "No saved chores yet. Add one above, or type chores straight into today's list."
+                                         : "No saved chores yet.")
+                            .font(skin.body(15))
+                            .foregroundStyle(skin.text2)
+                    }
+                    .listRowBackground(skin.card)
                 }
                 ForEach(rooms, id: \.self) { room in
-                    Section(room) {
+                    Section {
                         ForEach(chores.filter { $0.room == room }) { chore in
                             NavigationLink {
                                 ChoreDetailView(me: me, chore: chore)
                             } label: {
                                 HStack {
-                                    Text(chore.name)
+                                    Text(chore.name).font(skin.body(17, .bold)).foregroundStyle(skin.text)
                                     Spacer()
                                     if showTimes {
-                                        Text("\(chore.minutes) min").foregroundStyle(.secondary)
+                                        Text("\(chore.minutes) min").font(skin.body(14)).foregroundStyle(skin.text2)
                                     }
                                 }
                             }
@@ -59,40 +67,15 @@ struct ChoreLibraryView: View {
                                 }
                             }
                         }
+                    } header: {
+                        Text(room)
                     }
+                    .listRowBackground(skin.card)
                 }
             }
+            .skinnedList()
             .navigationTitle("Chores")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Text("Using as \(me.name)")
-                        if me.isParent {
-                            Toggle("Show chore times", isOn: Binding(
-                                get: { showTimes },
-                                set: { v in store.run { try $0.setShowTimes(v, by: me) } }))
-                        }
-                        if HouseholdState.canSetGameMode(me) {
-                            Toggle("Game mode", isOn: Binding(
-                                get: { store.state?.isGameMode ?? false },
-                                set: { v in store.run { try $0.setGameMode(v, by: me) } }))
-                        }
-                        if me.isParent {
-                            Button("Prize pot…") { editingPrizes = true }
-                            Button("Remove the starter chores", role: .destructive) { confirmingClear = true }
-                        }
-                        Button("Switch person") { meRaw = "" }
-                    } label: { PersonBadge(person: me) }
-                }
-            }
             .sheet(isPresented: $scanning) { RoomScanView(me: me) }
-            .sheet(isPresented: $editingPrizes) { PrizePotView(me: me) }
-            .confirmationDialog("Remove the 20 starter chores? Chores you added yourself stay.",
-                                isPresented: $confirmingClear, titleVisibility: .visible) {
-                Button("Remove starter chores", role: .destructive) {
-                    store.run { try $0.removeStarterChores(by: me) }
-                }
-            }
             .sheet(isPresented: $adding) {
                 ChoreEditorView(title: "New chore", chore: Chore(name: "", room: rooms.first ?? "Kitchen", minutes: 10, steps: [""]),
                                 rooms: rooms) { new in
@@ -107,6 +90,7 @@ struct ChoreDetailView: View {
     let me: Person
     let chore: Chore
     @EnvironmentObject var store: HouseholdStore
+    @Environment(\.skin) private var skin
     var showTimes: Bool { store.showTimes }
     @State private var editing = false
 
@@ -116,17 +100,33 @@ struct ChoreDetailView: View {
         List {
             Section {
                 Text(showTimes ? "\(current.room) · about \(current.minutes) min" : current.room)
-                    .foregroundStyle(.secondary)
+                    .font(skin.body(15))
+                    .foregroundStyle(skin.text2)
             }
-            Section("How to do it") {
+            .listRowBackground(skin.card)
+            Section {
+                if current.steps.isEmpty {
+                    Text(me.isParent ? "No steps yet. Tap Edit to add them." : "No steps written for this one yet.")
+                        .font(skin.body(15))
+                        .foregroundStyle(skin.text2)
+                }
                 ForEach(Array(current.steps.enumerated()), id: \.offset) { i, step in
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "\(i + 1).circle").foregroundStyle(Color.accentColor)
-                        Text(step)
+                        Text("\(i + 1)")
+                            .font(.system(size: 14, weight: .heavy, design: .rounded))
+                            .foregroundStyle(skin.accentText)
+                            .frame(width: 26, height: 26)
+                            .overlay(Circle().strokeBorder(skin.accentText, lineWidth: 2))
+                        Text(step).font(skin.body(17)).foregroundStyle(skin.text)
                     }
+                    .padding(.vertical, 2)
                 }
+            } header: {
+                Text("How to do it")
             }
+            .listRowBackground(skin.card)
         }
+        .skinnedList()
         .navigationTitle(current.name)
         .toolbar {
             if me.isParent {
@@ -210,6 +210,7 @@ struct ChoreEditorView: View {
                     Text("Write it like you're explaining it to someone who's never done it.")
                 }
             }
+            .skinnedList()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -82,9 +82,10 @@ struct GameLayer: View {
         let newlyDone = done.subtracting(oldDone)
         for (i, id) in newlyDone.enumerated() {
             let task = blitz?.tasks.first { $0.id == id }
-            // Burst over the Done column, where the finished chore lands.
-            let origin = CGPoint(x: size.width * CGFloat.random(in: 0.72...0.84),
-                                 y: size.height * CGFloat.random(in: 0.45...0.6))
+            // Burst over the lane of whoever finished it, where their score ticks up.
+            let lane = CGFloat(Person.allCases.firstIndex(of: task?.claimedBy ?? .brandon) ?? 0)
+            let origin = CGPoint(x: size.width * CGFloat.random(in: 0.76...0.84),
+                                 y: size.height * (0.28 + lane * 0.19))
             let label = "+\(max(task?.minutes ?? 1, 1)) XP"
             bursts.append(BurstEvent(origin: origin, start: Date().addingTimeInterval(Double(i) * 0.3),
                                      seed: UInt64.random(in: 1...UInt64.max), label: label))
@@ -110,7 +111,7 @@ struct GameLayer: View {
         if let newest = s.allSpins.last(where: { !oldSpins.contains($0.id) }) {
             revealStart = Date()
             withAnimation(.spring) { reveal = newest }
-            GameAudio.shared.lootSequence(big: newest.prize.name.lowercased().contains("jackpot"))
+            GameAudio.shared.lootSequence(big: s.isJackpot(newest.prize))
             DispatchQueue.main.asyncAfter(deadline: .now() + LootTiming.land) {
                 // Gold pixel shower around the spin panel when the prize lands.
                 let c = CGPoint(x: size.width / 2, y: size.height / 2)

@@ -9,6 +9,7 @@ struct StartBlitzView: View {
     @EnvironmentObject var store: HouseholdStore
     var showTimes: Bool { store.showTimes }
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.skin) private var skin
 
     @State private var items: [Chore] = []
     @State private var newName = ""
@@ -61,11 +62,7 @@ struct StartBlitzView: View {
                             .focused($typing)
                             .submitLabel(.done)
                             .onSubmit(addTyped)
-                        Menu {
-                            ForEach(rooms, id: \.self) { r in Button(r) { newRoom = r } }
-                        } label: {
-                            Text(newRoom).font(.subheadline)
-                        }
+                        RoomChip(rooms: rooms, room: $newRoom)
                         Button(action: addTyped) {
                             Image(systemName: "plus.circle.fill").font(.title2)
                         }
@@ -74,7 +71,10 @@ struct StartBlitzView: View {
                     }
                 } header: {
                     Text("Today's list")
+                } footer: {
+                    if !items.isEmpty { Text("Tap a chore to add steps. Swipe left to take it off.") }
                 }
+                .listRowBackground(skin.card)
 
                 if rewardPeople.count > 0 {
                     Section {
@@ -89,6 +89,7 @@ struct StartBlitzView: View {
                     } footer: {
                         Text("Earned when all of his assigned chores are done.")
                     }
+                    .listRowBackground(skin.card)
                 }
 
                 Section {
@@ -107,14 +108,16 @@ struct StartBlitzView: View {
                         .pickerStyle(.segmented)
                     }
                 }
+                .listRowBackground(skin.card)
+                .tint(Palette.done)
 
                 Section {
-                    DisclosureGroup("Pick from saved chores (\(saved.count))", isExpanded: $showSaved) {
+                    DisclosureGroup("Pick from your \(saved.count) saved chores", isExpanded: $showSaved) {
                         ForEach(saved) { chore in
                             Button { toggleSaved(chore) } label: {
                                 HStack {
                                     Image(systemName: isPicked(chore) ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(isPicked(chore) ? Color.accentColor : Color.secondary)
+                                        .foregroundStyle(isPicked(chore) ? Palette.done : Color.secondary)
                                     VStack(alignment: .leading) {
                                         Text(chore.name).foregroundStyle(.primary)
                                         Text(chore.room).font(.caption).foregroundStyle(.secondary)
@@ -126,7 +129,9 @@ struct StartBlitzView: View {
                         }
                     }
                 }
+                .listRowBackground(skin.card)
             }
+            .skinnedList()
             .navigationTitle("Today's list")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -135,15 +140,12 @@ struct StartBlitzView: View {
             .safeAreaInset(edge: .bottom) {
                 Button(action: start) {
                     Text(items.isEmpty ? "Add chores to start" : "Start \(items.count) chore\(items.count == 1 ? "" : "s")")
-                        .font(.title3.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(BlitzButtonStyle(kind: .accent, height: 56))
                 .disabled(items.isEmpty || starting)
-                .padding()
-                .background(.bar)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(skin.bg)
             }
             .onAppear { if newRoom.isEmpty { newRoom = rooms.first ?? "Kitchen" } }
             .sheet(item: $editing) { item in

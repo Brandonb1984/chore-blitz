@@ -9,56 +9,73 @@ struct SpinView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var result: Spin?
     @State private var spinStart = Date()
-    @State private var showPrize = false
     @State private var spinning = false
     @State private var burstAt: Date?
 
     var spinsLeft: Int { store.state?.spinsLeft(for: me) ?? 0 }
 
+    @State private var showingOdds = false
+
+    /// What the big button says: open the first chest, open the next, or done.
+    var buttonTitle: String {
+        if spinning { return "OPENING…" }
+        if spinsLeft == 0 { return "DONE" }
+        if result == nil { return spinsLeft == 1 ? "OPEN" : "OPEN · \(spinsLeft) CHESTS" }
+        return "OPEN NEXT · \(spinsLeft) LEFT"
+    }
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.06, green: 0.02, blue: 0.14), Color(red: 0.2, green: 0.05, blue: 0.3)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-            VStack(spacing: 28) {
-                Text("PRIZE SPIN")
-                    .font(.system(size: 40, weight: .black, design: .monospaced))
-                    .foregroundStyle(.yellow)
-                if let result {
-                    SlotReels(start: spinStart, prizeName: result.prize.name, size: 90)
-                    if showPrize {
-                        Text(result.prize.name.uppercased())
-                            .font(.system(size: 44, weight: .black, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .transition(.scale)
+            ArcadePhoneBackground()
+            VStack(spacing: 18) {
+                HStack {
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.headline.weight(.heavy))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 40, height: 40)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.12)))
                     }
-                } else {
-                    SlotReels(start: .distantFuture, prizeName: "", size: 90)
+                    .accessibilityLabel("Close")
                 }
-                Text("\(spinsLeft) spin\(spinsLeft == 1 ? "" : "s") left")
-                    .font(.headline.monospaced())
-                    .foregroundStyle(.white.opacity(0.8))
-                Button(action: spin) {
-                    Text(spinning ? "…" : "SPIN")
-                        .font(.system(size: 32, weight: .black, design: .monospaced))
+                Text("LOOT CHEST")
+                    .font(.system(size: 40, weight: .black, design: .monospaced))
+                    .foregroundStyle(Arcade.yellow)
+                    .shadow(color: .black.opacity(0.6), radius: 0, x: 3, y: 3)
+                Spacer(minLength: 0)
+                // Before opening the chest idles; then it bursts open with loot.
+                LootChestView(start: result == nil ? .distantFuture : spinStart, prize: result?.prize, size: 280)
+                Spacer(minLength: 0)
+                Button {
+                    if spinsLeft == 0 && !spinning { dismiss() } else { spin() }
+                } label: {
+                    Text(buttonTitle)
+                        .font(.system(size: 24, weight: .black, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.06, green: 0.02, blue: 0.14))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 18)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Arcade.yellow))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.55)).offset(x: 4, y: 5))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-                .disabled(spinning || spinsLeft == 0)
-                Button("Close") { dismiss() }
-                    .foregroundStyle(.white.opacity(0.8))
-                if let pot = store.state?.prizes, !pot.isEmpty {
+                .buttonStyle(.plain)
+                .disabled(spinning)
+                Button(showingOdds ? "Hide the odds" : "What can I get?") {
+                    withAnimation { showingOdds.toggle() }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.8))
+                if showingOdds, let pot = store.state?.prizes, !pot.isEmpty {
                     PrizeOdds(pot: pot)
                 }
             }
-            .padding(28)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
             if let burstAt {
                 GeometryReader { g in
                     // Gold pixel shower when the prize lands.
                     ForEach(0..<3, id: \.self) { i in
-                        PixelBurst(origin: CGPoint(x: g.size.width * [0.2, 0.5, 0.8][i], y: g.size.height * 0.32),
+                        PixelBurst(origin: CGPoint(x: g.size.width * [0.2, 0.5, 0.8][i], y: g.size.height * 0.55),
                                    start: burstAt.addingTimeInterval(Double(i) * 0.1),
                                    count: 50, pixel: 10, colors: PixelBurst.gold, seed: UInt64(5 + i))
                     }
@@ -75,7 +92,6 @@ struct SpinView: View {
 
     func spin() {
         spinning = true
-        showPrize = false
         Task {
             var won: Spin?
             let ok = await store.apply { won = try $0.spin(by: me, roll: Double.random(in: 0..<1), now: .now) }
@@ -83,17 +99,16 @@ struct SpinView: View {
             spinStart = Date()
             result = won
             let haptic = UISelectionFeedbackGenerator()
-            for i in 0..<18 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.11) {
-                    haptic.selectionChanged()
-                    GameAudio.shared.tick()
-                }
+            for i in 0..<9 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.11) { haptic.selectionChanged() }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-                withAnimation(.spring) { showPrize = true }
+            GameAudio.shared.lootSequence(big: won.prize.name.lowercased().contains("jackpot"))
+            DispatchQueue.main.asyncAfter(deadline: .now() + LootTiming.open) {
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + LootTiming.land) {
                 burstAt = Date()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
-                GameAudio.shared.win(big: won.prize.name.lowercased().contains("jackpot"))
                 spinning = false
             }
         }
@@ -107,19 +122,19 @@ struct PrizeOdds: View {
     var body: some View {
         let total = max(pot.reduce(0) { $0 + $1.weight }, 1)
         VStack(alignment: .leading, spacing: 4) {
-            Text("Odds").font(.caption.bold()).foregroundStyle(.white.opacity(0.7))
+            Text("Chance of each prize").font(.caption.bold()).foregroundStyle(.white.opacity(0.7))
             ForEach(pot) { p in
                 HStack {
                     Text(p.name)
                     Spacer()
                     Text("\(Int((Double(p.weight) / Double(total) * 100).rounded()))%")
                 }
-                .font(.caption.monospaced())
-                .foregroundStyle(.white.opacity(0.8))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.9))
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.1)))
     }
 }
 

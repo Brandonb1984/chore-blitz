@@ -40,20 +40,13 @@ struct GameLayer: View {
                 }
                 if let reveal {
                     VStack(spacing: 30) {
-                        Text("\(reveal.person.name.uppercased()) SPINS!")
-                            .font(.system(size: 64, weight: .black, design: .monospaced))
+                        Text("\(reveal.person.name.uppercased()) OPENS A CHEST!")
+                            .font(.system(size: 56, weight: .black, design: .monospaced))
                             .foregroundStyle(.white)
-                        SlotReels(start: revealStart, prizeName: reveal.prize.name, size: 160)
-                        TimelineView(.periodic(from: revealStart, by: 0.25)) { ctx in
-                            if ctx.date.timeIntervalSince(revealStart) > 2.5 {
-                                Text(reveal.prize.name.uppercased())
-                                    .font(.system(size: 96, weight: .black, design: .monospaced))
-                                    .foregroundStyle(.yellow)
-                            }
-                        }
+                        LootChestView(start: revealStart, prize: reveal.prize, size: 560)
                     }
-                    .padding(60)
-                    .frame(minHeight: 620)
+                    .padding(.horizontal, 80)
+                    .padding(.vertical, 40)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.12, green: 0.04, blue: 0.22)))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.yellow, lineWidth: 6))
                     .transition(.scale)
@@ -117,11 +110,8 @@ struct GameLayer: View {
         if let newest = s.allSpins.last(where: { !oldSpins.contains($0.id) }) {
             revealStart = Date()
             withAnimation(.spring) { reveal = newest }
-            for i in 0..<20 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.1) { GameAudio.shared.tick() }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                GameAudio.shared.win(big: newest.prize.name.lowercased().contains("jackpot"))
+            GameAudio.shared.lootSequence(big: newest.prize.name.lowercased().contains("jackpot"))
+            DispatchQueue.main.asyncAfter(deadline: .now() + LootTiming.land) {
                 // Gold pixel shower around the spin panel when the prize lands.
                 let c = CGPoint(x: size.width / 2, y: size.height / 2)
                 let spots = [CGPoint(x: c.x - 480, y: c.y - 260), CGPoint(x: c.x + 480, y: c.y - 260),
@@ -137,7 +127,7 @@ struct GameLayer: View {
                     bursts.removeAll { Date().timeIntervalSince($0.start) > 2 }
                 }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 7) {
                 withAnimation { if reveal?.id == newest.id { reveal = nil } }
             }
         }

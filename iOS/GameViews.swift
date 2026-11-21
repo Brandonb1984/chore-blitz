@@ -27,6 +27,10 @@ struct SpinView: View {
     var body: some View {
         ZStack {
             ArcadePhoneBackground()
+            // The chest scene fills the screen: beams to the top, loot everywhere.
+            LootChestView(start: result == nil ? .distantFuture : spinStart, prize: result?.prize,
+                          size: 300, chestFraction: 0.72, mouthFraction: 0.5)
+                .ignoresSafeArea()
             VStack(spacing: 18) {
                 HStack {
                     Spacer()
@@ -44,9 +48,6 @@ struct SpinView: View {
                     .foregroundStyle(Arcade.yellow)
                     .shadow(color: .black.opacity(0.6), radius: 0, x: 3, y: 3)
                 Spacer(minLength: 0)
-                // Before opening the chest idles; then it bursts open with loot.
-                LootChestView(start: result == nil ? .distantFuture : spinStart, prize: result?.prize, size: 280)
-                Spacer(minLength: 0)
                 Button {
                     if spinsLeft == 0 && !spinning { dismiss() } else { spin() }
                 } label: {
@@ -60,14 +61,10 @@ struct SpinView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(spinning)
-                Button(showingOdds ? "Hide the odds" : "What can I get?") {
-                    withAnimation { showingOdds.toggle() }
-                }
+                Button("What can I get?") { showingOdds = true }
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.8))
-                if showingOdds, let pot = store.state?.prizes, !pot.isEmpty {
-                    PrizeOdds(pot: pot)
-                }
+
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 12)
@@ -85,6 +82,15 @@ struct SpinView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingOdds) {
+            if let pot = store.state?.prizes, !pot.isEmpty {
+                PrizeOdds(pot: pot)
+                    .padding(20)
+                    .presentationDetents([.height(320)])
+                    .presentationBackground(Color(red: 0.10, green: 0.04, blue: 0.20))
+                    .preferredColorScheme(.dark)
+            }
+        }
         .onAppear {
             if debugScreen == "spinGo" { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { spin() } }
         }
@@ -237,10 +243,13 @@ struct SpinBanner: View {
                     .padding(.leading, 16)
                     .padding(.trailing, 12)
                     .padding(.vertical, 12)
-                    .background(LinearGradient(colors: [Color(uiColor: Palette.hex(0x8A3DFF)), Color(uiColor: Palette.hex(0xFF8A3D))],
-                                               startPoint: .leading, endPoint: .trailing),
-                                in: RoundedRectangle(cornerRadius: skin.corner, style: .continuous))
-                    .shadow(color: .black.opacity(skin.arcade ? 0.5 : 0), radius: 0, x: 5, y: 5)
+                    .background(
+                        // Shadow on the shape only, so the text isn't doubled.
+                        RoundedRectangle(cornerRadius: skin.corner, style: .continuous)
+                            .fill(LinearGradient(colors: [Color(uiColor: Palette.hex(0x8A3DFF)), Color(uiColor: Palette.hex(0xFF8A3D))],
+                                                 startPoint: .leading, endPoint: .trailing))
+                            .shadow(color: .black.opacity(skin.arcade ? 0.5 : 0), radius: 0, x: 5, y: 5)
+                    )
                 }
                 .buttonStyle(.plain)
             }

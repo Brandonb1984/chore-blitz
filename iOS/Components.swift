@@ -52,8 +52,13 @@ struct BlitzButtonStyle: ButtonStyle {
                 .foregroundStyle(foreground)
                 .padding(.horizontal, height * 0.36)
                 .frame(maxWidth: fill ? .infinity : nil, minHeight: height, maxHeight: height)
-                .background(background, in: RoundedRectangle(cornerRadius: skin.buttonCorner, style: .continuous))
-                .shadow(color: .black.opacity(skin.arcade ? 0.5 : 0), radius: 0, x: 4, y: 4)
+                // Hard arcade shadow on the button shape only; on the whole view it
+                // would also double the label text.
+                .background(
+                    RoundedRectangle(cornerRadius: skin.buttonCorner, style: .continuous)
+                        .fill(background)
+                        .shadow(color: .black.opacity(skin.arcade ? 0.5 : 0), radius: 0, x: 4, y: 4)
+                )
                 .opacity(isEnabled ? (pressed ? 0.75 : 1) : 0.4)
                 .scaleEffect(pressed ? 0.97 : 1)
                 .animation(.easeOut(duration: 0.12), value: pressed)

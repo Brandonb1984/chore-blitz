@@ -159,16 +159,36 @@ struct LootChestView: View {
     let prize: Prize?
     var size: CGFloat = 300
     var showCounter = true
+    /// Full-screen mode (phone): the scene fills whatever frame it's given,
+    /// the chest is this fraction of the width, its mouth sits at
+    /// `mouthFraction` of the height, beams reach the top and loot flies
+    /// across the whole frame. nil = the compact square layout (TV panel).
+    var chestFraction: CGFloat? = nil
+    var mouthFraction: CGFloat = 0.55
 
     var big: Bool { prize?.name.lowercased().contains("jackpot") ?? false }
 
     var body: some View {
         TimelineView(.animation) { ctx in
             let t = ctx.date.timeIntervalSince(start)
-            VStack(spacing: 0) {
-                Canvas { g, sz in draw(g, sz, t: t) }
-                    .frame(width: size * 1.2, height: size * 1.1)
-                if showCounter { counter(t: t) }
+            if let chestFraction {
+                GeometryReader { geo in
+                    let p = geo.size.width * chestFraction / 16
+                    let mouthY = geo.size.height * mouthFraction
+                    ZStack {
+                        Canvas { g, sz in draw(g, sz, t: t) }
+                        if showCounter {
+                            VStack(spacing: 0) { counter(t: t) }
+                                .position(x: geo.size.width / 2, y: mouthY + 9 * p + size * 0.2)
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    Canvas { g, sz in draw(g, sz, t: t) }
+                        .frame(width: size * 1.2, height: size * 1.1)
+                    if showCounter { counter(t: t) }
+                }
             }
         }
         .allowsHitTesting(false)
@@ -204,10 +224,11 @@ struct LootChestView: View {
     // MARK: Scene
 
     func draw(_ g: GraphicsContext, _ sz: CGSize, t: Double) {
-        let S = min(sz.width, sz.height)
-        let p = S / 26                      // one chest pixel
+        let full = chestFraction != nil
+        let S = full ? sz.width : min(sz.width, sz.height)
+        let p = full ? sz.width * chestFraction! / 16 : S / 26   // one chest pixel
         let chestW = 16 * p
-        let mouth = CGPoint(x: sz.width / 2, y: sz.height - 10 * p)
+        let mouth = CGPoint(x: sz.width / 2, y: full ? sz.height * mouthFraction : sz.height - 10 * p)
         let opened = t >= LootTiming.open
         let since = t - LootTiming.open     // time since the lid popped
 
@@ -227,7 +248,7 @@ struct LootChestView: View {
                 let n = Double(beamColors.count)
                 let base = (Double(i) - (n - 1) / 2) * (big ? 0.32 : 0.42)
                 let a = base + sin(t * 1.3 + Double(i)) * 0.06 - .pi / 2
-                let len = Double(mouth.y) * 1.05 * grow
+                let len = Double(mouth.y) * (full ? 1.4 : 1.05) * grow
                 let half = 0.12
                 var beam = Path()
                 beam.move(to: CGPoint(x: mouth.x - p * 2, y: mouth.y))
@@ -255,12 +276,13 @@ struct LootChestView: View {
         // Loot flying out and falling back with gravity.
         if opened {
             var rng = SeededRNG(seed: big ? 77 : 31)
-            let count = big ? 40 : 24
+            let count = full ? (big ? 64 : 40) : (big ? 40 : 24)
             for i in 0..<count {
                 let delay = Double(i) * (big ? 0.035 : 0.05)
                 let lt = since - delay
                 let speed = Double.random(in: 0.95...1.45, using: &rng)
-                let angle = Double.random(in: -0.62...0.62, using: &rng) - .pi / 2
+                let spread = full ? 1.05 : 0.62
+                let angle = Double.random(in: -spread...spread, using: &rng) - .pi / 2
                 let spin = Double.random(in: -1...1, using: &rng)
                 guard lt > 0, lt < LootTiming.lootLife else { continue }
                 let v = Double(mouth.y) * 1.25 * speed
@@ -268,7 +290,7 @@ struct LootChestView: View {
                 let y = Double(mouth.y) + sin(angle) * v * lt + Double(mouth.y) * 0.8 * lt * lt
                 let sprite = Sprites.loot[i % Sprites.loot.count]
                 let scale = min(1, lt * 5) * (1 - max(0, lt - 1.8) / 0.8)
-                let lp = p * 0.85 * CGFloat(scale)
+                let lp = p * (full ? 0.7 : 0.85) * CGFloat(scale)
                 guard lp > 0.2 else { continue }
                 var lg = g
                 lg.translateBy(x: x, y: y)

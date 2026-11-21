@@ -109,7 +109,7 @@ struct RootView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
     @AppStorage(ArcadeLook.key) private var arcadeChoice = ""
-    @State private var tab = debugScreen == "chores" ? 1 : (debugScreen == "settings" ? 2 : 0)
+    @State private var tab = debugScreen == "chores" ? 1 : ((debugScreen == "settings" || debugScreen == "prizes") ? 2 : 0)
 
     var skin: Skin {
         let arcade = (store.state?.isGameMode ?? false) && ArcadeLook.isOn(choice: arcadeChoice, me: me)

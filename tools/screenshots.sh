@@ -2,7 +2,9 @@
 # usage: shots.sh <outdir>   — screenshots every phone + TV screen from the current build
 OUT=$1; mkdir -p $OUT
 cd ~/Projects/ChoreBlitz
-P=94C147CE-9848-4CBB-BA17-DE484ADEA6F6; T=E82CFDF6-475B-4251-A072-B9A11026DA20
+# Dedicated simulators so other projects on this Mac never collide with these shots.
+P=$(xcrun simctl list devices | grep "ChoreBlitz iPhone (" | grep -oE "[0-9A-F-]{36}" | head -1)
+T=$(xcrun simctl list devices | grep "ChoreBlitz TV (" | grep -oE "[0-9A-F-]{36}" | head -1)
 xcrun simctl boot $P 2>/dev/null; xcrun simctl boot $T 2>/dev/null
 xcrun simctl bootstatus $P -b >/dev/null; xcrun simctl bootstatus $T -b >/dev/null
 xcrun simctl status_bar $P override --time 9:41 --batteryLevel 100 --batteryState charged --wifiBars 3 --cellularBars 4 2>/dev/null
@@ -25,16 +27,27 @@ tv() { # name wait args...
 phone warmup kira 4 -demo
 phone who "" 3 -demo
 HINT=false phone today-kira-hint kira 3 -demo
+phone today-kira kira 3 -demo
+xcrun simctl ui $P appearance dark
+phone today-kira-dark kira 3 -demo
+phone chores-dark kira 3 -demo -screen chores
+xcrun simctl ui $P appearance light
 phone today-braden braden 3 -demo
 phone today-reagen reagen 3 -demo
+phone game-reagen reagen 3 -demoGame
+phone game-kira kira 3 -demoGame
+phone fresh-kira kira 3 -demoFresh
 phone idle-kira kira 3 -demoEmpty
 phone idle-reagen reagen 3 -demoEmpty
 phone finished-kira kira 3 -demoFinished
+phone finished-reagen reagen 3 -demoFinished
+phone detail braden 4 -demo -screen detail
 phone chores kira 3 -demo -screen chores
+phone settings-kira kira 3 -demo -screen settings
+phone settings-reagen reagen 3 -demo -screen settings
 phone start kira 4 -demoEmpty -screen start
 phone edit kira 4 -demo -screen edit
-phone detail braden 4 -demo -screen detail
-phone game-reagen reagen 3 -demoGame
+phone prizes kira 4 -demoGame -screen prizes
 phone spin reagen 4 -demoGame -screen spin
 tv warmup 4 -demo
 tv board 4 -demo
@@ -44,6 +57,6 @@ tv idle 4 -demoEmpty
 tv finished 4 -demoFinished
 tv game 3 -demoGame
 xcrun simctl terminate $T com.brandonbourne.ChoreBlitzTV 2>/dev/null
-xcrun simctl shutdown all
+xcrun simctl shutdown $P; xcrun simctl shutdown $T
 rm -f $OUT/phone-warmup.png $OUT/tv-warmup.png
 ls $OUT

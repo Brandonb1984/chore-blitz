@@ -294,7 +294,7 @@ struct PersonLane: View {
                 status(working: working)
                     .font(look.text(27))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .truncationMode(.tail)
                 if let extra = extraLine {
                     Text(extra)
                         .font(look.text(25))

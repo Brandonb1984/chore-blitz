@@ -31,6 +31,10 @@ struct BlitzTab: View {
                     }
                 }
             }
+            .onAppear {
+                if debugScreen == "start" { showingStart = true }
+                if debugScreen == "edit" { editingList = true }
+            }
             .sheet(isPresented: $showingStart) { StartBlitzView(me: me) }
             .sheet(isPresented: $editingList) { EditListView(me: me) }
         }
@@ -219,6 +223,9 @@ struct RunningBlitzView: View {
                 celebrate("LEVEL \(lv)!")
             }
             knownLevel = lv
+        }
+        .onAppear {
+            if debugScreen == "detail" { selected = (mine.first ?? open.first)?.id }
         }
         .navigationDestination(item: $selected) { id in
             TaskDetailView(me: me, taskID: id)

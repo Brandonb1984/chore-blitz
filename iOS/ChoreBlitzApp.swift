@@ -57,18 +57,31 @@ struct WhoAreYouView: View {
     }
 }
 
+/// Debug builds: launch with `-screen chores|start|edit|detail|spin` to open
+/// that screen directly (simulator screenshots can't tap). Always nil in Release.
+var debugScreen: String? {
+    #if DEBUG
+    return UserDefaults.standard.string(forKey: "screen")
+    #else
+    return nil
+    #endif
+}
+
 struct RootView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    @State private var tab = debugScreen == "chores" ? 1 : 0
 
     var body: some View {
         Group {
             if store.state != nil {
-                TabView {
+                TabView(selection: $tab) {
                     BlitzTab(me: me)
                         .tabItem { Label("Today", systemImage: "sparkles") }
+                        .tag(0)
                     ChoreLibraryView(me: me)
                         .tabItem { Label("Chores", systemImage: "list.bullet.rectangle") }
+                        .tag(1)
                 }
             } else if store.isLoading {
                 ProgressView("Loading…")

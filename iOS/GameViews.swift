@@ -200,6 +200,7 @@ struct SpinBanner: View {
                     LinearGradient(colors: [.purple, .orange], startPoint: .leading, endPoint: .trailing)))
             }
             .buttonStyle(.plain)
+            .onAppear { if debugScreen == "spin" { showing = true } }
             .fullScreenCover(isPresented: $showing) { SpinView(me: me) }
         }
     }

@@ -36,12 +36,24 @@ final class HouseholdStore: ObservableObject {
     /// chores and 1 spin left. In Debug builds, a few seconds in he finishes
     /// another chore and then spins, so the TV effects can be seen.
     private let demoGame = ProcessInfo.processInfo.arguments.contains("-demoGame")
-    private var demo: Bool { demoFresh || demoGame || ProcessInfo.processInfo.arguments.contains("-demo") }
+    /// `-demoFinished`: the sample list, ended. `-demoEmpty`: no list yet.
+    private let demoFinished = ProcessInfo.processInfo.arguments.contains("-demoFinished")
+    private let demoEmpty = ProcessInfo.processInfo.arguments.contains("-demoEmpty")
+    private var demo: Bool {
+        demoFresh || demoGame || demoFinished || demoEmpty || ProcessInfo.processInfo.arguments.contains("-demo")
+    }
 
     init(pollSeconds: Double) {
         self.pollSeconds = pollSeconds
         if demo {
-            state = demoFresh ? Self.freshDemoState() : demoGame ? Self.gameDemoState() : Self.demoState()
+            if demoFresh { state = Self.freshDemoState() }
+            else if demoGame { state = Self.gameDemoState() }
+            else if demoEmpty { state = .starter() }
+            else if demoFinished {
+                var s = Self.demoState()
+                try? s.endBlitz(by: .kira, now: Date())
+                state = s
+            } else { state = Self.demoState() }
             isLoading = false
         }
         #if DEBUG

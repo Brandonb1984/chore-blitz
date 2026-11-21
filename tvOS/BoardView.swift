@@ -241,7 +241,8 @@ struct ChoreCard: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: font * 0.8, weight: .black))
                     .foregroundStyle(Palette.done)
-            } else if look.game && roomy {
+            } else if look.game && roomy && !working {
+                // Only on open chores: a claimed one needs the room for its name.
                 Text("+\(max(task.minutes, 1)) XP")
                     .font(.system(size: font * 0.62, weight: .black, design: .monospaced))
                     .foregroundStyle(Palette.arcadeMint.opacity(working ? 1 : 0.7))
@@ -444,7 +445,7 @@ struct FinishedBoard: View {
                 // What's still open, so it's clear what carries over.
                 (Text("Still to do:  ").foregroundColor(TVLook.faint)
                     + Text(left.map(\.name).joined(separator: "  ·  ")).foregroundColor(TVLook.dim))
-                    .font(look.text(28))
+                    .font(look.text(32))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .frame(maxWidth: 1500)

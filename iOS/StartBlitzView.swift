@@ -1,127 +1,233 @@
 import ChoreKit
 import SwiftUI
 
-/// Parents pick chores and a time, then start. One-off chores can be
-/// added here without saving them to the library.
+/// "Make today's list": starts empty. Type a chore and tap +, or pick from
+/// saved chores. Assign to someone, set Reagen's reward, optionally turn on
+/// Blitz mode, then Start. New chores are saved for next time automatically.
 struct StartBlitzView: View {
     let me: Person
     @EnvironmentObject var store: HouseholdStore
+    var showTimes: Bool { store.showTimes }
     @Environment(\.dismiss) private var dismiss
-    @State private var minutes = 30
-    @State private var picked: [UUID] = []
-    @State private var oneOffs: [Chore] = []
-    /// One-offs also being saved to the library; used as a fallback if that save hasn't landed yet.
-    @State private var savedOneOffs: [Chore] = []
-    @State private var addingOneOff = false
-    @State private var starting = false
+    @Environment(\.skin) private var skin
 
-    var chores: [Chore] { store.state?.chores ?? [] }
-    var rooms: [String] { store.state?.rooms ?? [] }
-    var totalMinutes: Int {
-        chores.filter { picked.contains($0.id) }.map(\.minutes).reduce(0, +) + oneOffs.map(\.minutes).reduce(0, +)
+    @State private var items: [Chore] = []
+    @State private var newName = ""
+    @State private var newRoom = ""
+    @State private var editing: Chore?
+    @State private var showSaved = false
+    @State private var blitzMode = false
+    @State private var minutes = 30
+    @State private var assignments: [UUID: Person] = [:]
+    @State private var prizes: [Person: String] = [:]
+    @State private var starting = false
+    @FocusState private var typing: Bool
+
+    var saved: [Chore] { store.state?.chores ?? [] }
+    var rooms: [String] {
+        var r = store.state?.rooms ?? []
+        for c in items where !r.contains(c.room) { r.append(c.room) }
+        return r.sorted()
     }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Picker("How long", selection: $minutes) {
-                        Text("30 min").tag(30)
-                        Text("45 min").tag(45)
-                        Text("60 min").tag(60)
+                    if items.isEmpty {
+                        Text("Type the chores you want done today, or pick from your saved chores below.")
+                            .foregroundStyle(.secondary)
                     }
-                    .pickerStyle(.segmented)
-                    Text("\(picked.count + oneOffs.count) chores picked · about \(totalMinutes) min of work")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section {
-                    Button { addingOneOff = true } label: {
-                        Label("Add a one-off chore", systemImage: "plus.circle.fill")
-                    }
-                    ForEach(oneOffs) { c in
+                    ForEach(items) { item in
                         HStack {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
-                            Text(c.name)
-                            Spacer()
-                            Text("just this time").font(.caption).foregroundStyle(.secondary)
+                            Button { editing = item } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.name).foregroundStyle(.primary)
+                                    Text(item.steps.isEmpty ? "\(item.room) · tap to add steps" : item.room)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            assignMenu(item.id)
                         }
                     }
-                    .onDelete { oneOffs.remove(atOffsets: $0) }
+                    .onDelete { offsets in
+                        for i in offsets { assignments[items[i].id] = nil }
+                        items.remove(atOffsets: offsets)
+                    }
+                    HStack {
+                        TextField("Add a chore…", text: $newName)
+                            .focused($typing)
+                            .submitLabel(.done)
+                            .onSubmit(addTyped)
+                        RoomChip(rooms: rooms, room: $newRoom)
+                        Button(action: addTyped) {
+                            Image(systemName: "plus.circle.fill").font(.title2)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                } header: {
+                    Text("Today's list")
+                } footer: {
+                    if !items.isEmpty { Text("Tap a chore to add steps. Swipe left to take it off.") }
                 }
-                ForEach(rooms, id: \.self) { room in
-                    Section(room) {
-                        ForEach(chores.filter { $0.room == room }) { chore in
-                            Button { toggle(chore.id) } label: {
+                .listRowBackground(skin.card)
+
+                if rewardPeople.count > 0 {
+                    Section {
+                        ForEach(rewardPeople) { p in
+                            HStack {
+                                PersonBadge(person: p)
+                                TextField("Reward for \(p.name), like $20", text: prizeBinding(p))
+                            }
+                        }
+                    } header: {
+                        Text("Reward")
+                    } footer: {
+                        Text("Earned when all of his assigned chores are done.")
+                    }
+                    .listRowBackground(skin.card)
+                }
+
+                Section {
+                    Toggle(isOn: $blitzMode.animation()) {
+                        VStack(alignment: .leading) {
+                            Text("Blitz mode")
+                            Text("Adds a countdown on the TV").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if blitzMode {
+                        Picker("How long", selection: $minutes) {
+                            Text("30 min").tag(30)
+                            Text("45 min").tag(45)
+                            Text("60 min").tag(60)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+                .listRowBackground(skin.card)
+                .tint(Palette.done)
+
+                Section {
+                    DisclosureGroup("Pick from your \(saved.count) saved chores", isExpanded: $showSaved) {
+                        ForEach(saved) { chore in
+                            Button { toggleSaved(chore) } label: {
                                 HStack {
-                                    Image(systemName: picked.contains(chore.id) ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(picked.contains(chore.id) ? Color.accentColor : Color.secondary)
-                                    Text(chore.name).foregroundStyle(.primary)
+                                    Image(systemName: isPicked(chore) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(isPicked(chore) ? Palette.done : Color.secondary)
+                                    VStack(alignment: .leading) {
+                                        Text(chore.name).foregroundStyle(.primary)
+                                        Text(chore.room).font(.caption).foregroundStyle(.secondary)
+                                    }
                                     Spacer()
-                                    Text("\(chore.minutes) min").foregroundStyle(.secondary)
+                                    if showTimes { Text("\(chore.minutes) min").foregroundStyle(.secondary) }
                                 }
                             }
                         }
                     }
                 }
+                .listRowBackground(skin.card)
             }
-            .navigationTitle("Start a blitz")
+            .skinnedList()
+            .navigationTitle("Today's list")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Start") {
-                        starting = true
-                        let ids = picked, extras = oneOffs, saved = savedOneOffs, mins = minutes
-                        Task {
-                            let ok = await store.apply { state in
-                                let notYetSaved = saved.filter { c in !state.chores.contains { $0.id == c.id } }
-                                try state.startBlitz(by: me, choreIDs: ids, oneOffs: extras + notYetSaved,
-                                                     minutes: mins, now: .now)
-                            }
-                            starting = false
-                            if ok { dismiss() }
-                        }
-                    }
-                    .bold()
-                    .disabled(starting || (picked.isEmpty && oneOffs.isEmpty))
-                }
             }
-            .sheet(isPresented: $addingOneOff) {
-                OneOffEditor(me: me, rooms: rooms) { chore, saveToLibrary in
-                    if saveToLibrary {
-                        store.run { try $0.addChore(chore, by: me) }
-                        savedOneOffs.append(chore)
-                        picked.append(chore.id)
-                    } else {
-                        oneOffs.append(chore)
-                    }
+            .safeAreaInset(edge: .bottom) {
+                Button(action: start) {
+                    Text(items.isEmpty ? "Add chores to start" : "Start \(items.count) chore\(items.count == 1 ? "" : "s")")
+                }
+                .buttonStyle(BlitzButtonStyle(kind: .accent, height: 56))
+                .disabled(items.isEmpty || starting)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(skin.bg)
+            }
+            .onAppear { if newRoom.isEmpty { newRoom = rooms.first ?? "Kitchen" } }
+            .sheet(item: $editing) { item in
+                ChoreEditorView(title: "Edit chore", chore: item, rooms: rooms, saveLabel: "Done") { edited in
+                    if let i = items.firstIndex(where: { $0.id == item.id }) { items[i] = edited }
                 }
             }
         }
     }
 
-    func toggle(_ id: UUID) {
-        if let i = picked.firstIndex(of: id) { picked.remove(at: i) } else { picked.append(id) }
+    /// Typing a name that matches a saved chore uses the saved one (with its steps).
+    func addTyped() {
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        if let existing = saved.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            if !isPicked(existing) { items.append(existing) }
+        } else {
+            items.append(Chore(name: name, room: newRoom.isEmpty ? "Around the house" : newRoom, minutes: 10, steps: []))
+        }
+        newName = ""
+        typing = true
     }
-}
 
-/// The chore editor plus a "save to the chore list too" switch.
-struct OneOffEditor: View {
-    let me: Person
-    let rooms: [String]
-    let done: (Chore, Bool) -> Void
-    @State private var saveToLibrary = false
+    func isPicked(_ c: Chore) -> Bool { items.contains { $0.id == c.id } }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            ChoreEditorView(title: "One-off chore",
-                            chore: Chore(name: "", room: rooms.first ?? "Kitchen", minutes: 10, steps: [""]),
-                            rooms: rooms, saveLabel: "Add") { chore in
-                done(chore, saveToLibrary)
+    func toggleSaved(_ c: Chore) {
+        if let i = items.firstIndex(where: { $0.id == c.id }) {
+            assignments[c.id] = nil
+            items.remove(at: i)
+        } else {
+            items.append(c)
+        }
+    }
+
+    /// Only Reagen gets paid; Braden is an adult.
+    var rewardPeople: [Person] {
+        [Person.reagen].filter { p in assignments.values.contains(p) }
+    }
+
+    func prizeBinding(_ p: Person) -> Binding<String> {
+        Binding(get: { prizes[p] ?? "" }, set: { prizes[p] = $0 })
+    }
+
+    func start() {
+        starting = true
+        let list = items, assigned = assignments, rewards = prizes
+        let mins: Int? = blitzMode ? minutes : nil
+        Task {
+            let ok = await store.apply { state in
+                // Save new or edited chores so they're there next time.
+                for c in list {
+                    if state.chores.contains(where: { $0.id == c.id }) {
+                        try state.updateChore(c, by: me)
+                    } else {
+                        try state.addChore(c, by: me)
+                    }
+                }
+                try state.startBlitz(by: me, choreIDs: list.map(\.id), minutes: mins, now: .now,
+                                     assignments: assigned, prizes: rewards)
             }
-            Toggle("Also save it to the chore list", isOn: $saveToLibrary)
-                .padding()
-                .background(.bar)
+            starting = false
+            if ok { dismiss() }
+        }
+    }
+
+    func assignMenu(_ id: UUID) -> some View {
+        Menu {
+            Button("Anyone") { assignments[id] = nil }
+            ForEach(Person.allCases) { p in
+                Button(p.name) { assignments[id] = p }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if let p = assignments[id] {
+                    PersonBadge(person: p, size: 22)
+                    Text(p.name)
+                } else {
+                    Text("Anyone")
+                }
+                Image(systemName: "chevron.up.chevron.down").font(.caption2)
+            }
+            .font(.subheadline)
         }
     }
 }

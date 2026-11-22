@@ -36,6 +36,15 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(s.blitz?.tasks(in: .open).count, 2)
     }
 
+    func testNoTimerByDefaultOption() throws {
+        var s = HouseholdState(chores: [dishes])
+        try s.startBlitz(by: .kira, choreIDs: [dishes.id], minutes: nil, now: t0)
+        XCTAssertNil(s.blitz?.endsAt)
+        XCTAssertNil(s.blitz?.remaining(at: t0))
+        XCTAssertEqual(s.blitz?.hasTimer, false)
+        XCTAssertNotNil(s.runningBlitz, "without a timer it runs until done or ended")
+    }
+
     func testStartBlitzRules() throws {
         var s = HouseholdState(chores: [dishes])
         XCTAssertThrowsError(try s.startBlitz(by: .braden, choreIDs: [dishes.id], minutes: 30, now: t0))
@@ -144,5 +153,340 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(countdownText(0), "+0:00")
         XCTAssertEqual(countdownText(-90), "+1:30")
         XCTAssertEqual(countdownText(-3725), "+62:05")
+    }
+
+    // MARK: Rewards
+
+    func rewardBlitz() throws -> HouseholdState {
+        var s = HouseholdState(chores: [dishes, trash])
+        try s.startBlitz(by: .brandon, choreIDs: [dishes.id, trash.id], minutes: 45, now: t0,
+                         assignments: [dishes.id: .reagen, trash.id: .reagen], prizes: [.reagen: " $20 "])
+        return s
+    }
+
+    func testAssignedChoresStartClaimedWithReward() throws {
+        let s = try rewardBlitz()
+        let b = s.blitz!
+        XCTAssertEqual(b.tasks.map(\.claimedBy), [.reagen, .reagen])
+        XCTAssertEqual(b.assignedTasks(for: .reagen).count, 2)
+        XCTAssertEqual(b.reward(for: .reagen)?.prize, "$20")
+        XCTAssertFalse(b.hasEarned(b.reward(for: .reagen)!))
+    }
+
+    func testPrizeWithoutAssignedChoresIsDropped() throws {
+        var s = HouseholdState(chores: [dishes])
+        try s.startBlitz(by: .kira, choreIDs: [dishes.id], minutes: 30, now: t0, prizes: [.braden: "$20"])
+        XCTAssertNil(s.blitz?.reward(for: .braden))
+    }
+
+    func testEarnedWhenAllAssignedDoneEvenPastTimer() throws {
+        var s = try rewardBlitz()
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[0], by: .reagen, now: t0)
+        XCTAssertFalse(s.blitz!.hasEarned(s.blitz!.reward(for: .reagen)!))
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0.addingTimeInterval(3 * 3600))
+        XCTAssertTrue(s.blitz!.hasEarned(s.blitz!.reward(for: .reagen)!))
+    }
+
+    func testOnlyAssignedChoresCount() throws {
+        var s = HouseholdState(chores: [dishes, trash])
+        try s.startBlitz(by: .brandon, choreIDs: [dishes.id, trash.id], minutes: 30, now: t0,
+                         assignments: [dishes.id: .reagen], prizes: [.reagen: "$20"])
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0) // an extra chore he grabbed
+        XCTAssertFalse(s.blitz!.hasEarned(s.blitz!.reward(for: .reagen)!))
+    }
+
+    func testCantGiveBackAssignedChore() throws {
+        var s = try rewardBlitz()
+        let id = s.blitz!.tasks[0].id
+        XCTAssertThrowsError(try s.unclaim(taskID: id, by: .reagen)) {
+            XCTAssertEqual($0 as? ChoreError, .assignedChore)
+        }
+        try s.unclaim(taskID: id, by: .kira)
+        XCTAssertNil(s.blitz?.tasks[0].assignedTo)
+    }
+
+    func testMarkRewardPaid() throws {
+        var s = try rewardBlitz()
+        XCTAssertThrowsError(try s.markRewardPaid(for: .reagen, by: .brandon, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .rewardNotEarned)
+        }
+        for id in s.blitz!.tasks.map(\.id) { try s.markDone(taskID: id, by: .reagen, now: t0) }
+        XCTAssertThrowsError(try s.markRewardPaid(for: .reagen, by: .reagen, now: t0))
+        try s.markRewardPaid(for: .reagen, by: .brandon, now: t0)
+        XCTAssertEqual(s.blitz?.reward(for: .reagen)?.paidAt, t0)
+    }
+
+    func testOldSavedStateWithoutRewardsStillLoads() throws {
+        var s = try running()
+        s.blitz?.rewards = nil
+        var json = String(data: try JSONEncoder().encode(s), encoding: .utf8)!
+        json = json.replacingOccurrences(of: ",\"rewards\":null", with: "")
+        let back = try JSONDecoder().decode(HouseholdState.self, from: Data(json.utf8))
+        XCTAssertEqual(back.blitz?.allRewards, [])
+    }
+
+    func testShowTimesToggle() throws {
+        var s = HouseholdState(chores: [])
+        XCTAssertTrue(s.timesVisible)
+        XCTAssertThrowsError(try s.setShowTimes(false, by: .reagen))
+        try s.setShowTimes(false, by: .kira)
+        XCTAssertFalse(s.timesVisible)
+    }
+
+    func testRemoveStarterChoresKeepsOwn() throws {
+        var s = HouseholdState.starter()
+        let mine = Chore(name: "Wipe the high chair", room: "Kitchen", minutes: 5, steps: ["Wipe tray"])
+        try s.addChore(mine, by: .kira)
+        XCTAssertThrowsError(try s.removeStarterChores(by: .reagen))
+        try s.removeStarterChores(by: .kira)
+        XCTAssertEqual(s.chores, [mine])
+    }
+
+    func testEditListAfterStart() throws {
+        var s = try running()
+        let fridge = Chore(name: "Clean the refrigerator", room: "Kitchen", minutes: 20, steps: ["Toss old food"])
+        XCTAssertThrowsError(try s.addTasks([fridge], by: .reagen))
+        try s.addTasks([fridge], by: .kira)
+        XCTAssertEqual(s.blitz?.tasks.last?.name, "Clean the refrigerator")
+        let id = s.blitz!.tasks.last!.id
+        try s.claim(taskID: id, by: .brandon)
+        XCTAssertEqual(s.blitz?.tasks.last?.claimedBy, .brandon)
+        XCTAssertThrowsError(try s.removeTask(taskID: id, by: .braden))
+        try s.removeTask(taskID: id, by: .kira)
+        XCTAssertEqual(s.blitz?.tasks.count, 2)
+    }
+
+    // MARK: Game mode
+
+    func gameBlitz() throws -> HouseholdState {
+        var s = try running()
+        try s.setGameMode(true, by: .kira)
+        try s.setPrizePot([Prize(name: "$1", weight: 3), Prize(name: "$20", weight: 1)], by: .kira)
+        return s
+    }
+
+    func testPickByWeight() {
+        let pot = [Prize(name: "a", weight: 3), Prize(name: "b", weight: 1)]
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 0.0)?.name, "a")
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 0.74)?.name, "a")
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 0.75)?.name, "b")
+        XCTAssertEqual(HouseholdState.pick(from: pot, roll: 1.0)?.name, "b")
+        XCTAssertNil(HouseholdState.pick(from: [], roll: 0.5))
+    }
+
+    func testSpinsEarnedPerFinishedChore() throws {
+        var s = try gameBlitz()
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .noSpinsLeft)
+        }
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[0], by: .reagen, now: t0)
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 2)
+        let first = try s.spin(by: .reagen, roll: 0.9, now: t0)
+        XCTAssertEqual(first.prize.name, "$20")
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertEqual(s.unpaidSpins.count, 2)
+    }
+
+    func testOnlyReagenSpinsAndOnlyInGameMode() throws {
+        var s = try running()
+        try s.markDone(taskID: s.blitz!.tasks[0].id, by: .reagen, now: t0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .gameModeOff)
+        }
+        try s.setGameMode(true, by: .brandon)
+        try s.markDone(taskID: s.blitz!.tasks[1].id, by: .braden, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .braden), 0)
+        XCTAssertThrowsError(try s.spin(by: .braden, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .notSpinner)
+        }
+        XCTAssertThrowsError(try s.setGameMode(false, by: .braden))
+        try s.setGameMode(false, by: .reagen)
+        XCTAssertFalse(s.isGameMode)
+    }
+
+    func testSpinsStillUsableAfterListFinishes() throws {
+        var s = try gameBlitz()
+        for id in s.blitz!.tasks.map(\.id) { try s.markDone(taskID: id, by: .reagen, now: t0) }
+        XCTAssertNil(s.runningBlitz)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 2)
+    }
+
+    func testMarkSpinPaid() throws {
+        var s = try gameBlitz()
+        try s.markDone(taskID: s.blitz!.tasks[0].id, by: .reagen, now: t0)
+        let spin = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertThrowsError(try s.markSpinPaid(spin.id, by: .reagen, now: t0))
+        try s.markSpinPaid(spin.id, by: .kira, now: t0)
+        XCTAssertTrue(s.unpaidSpins.isEmpty)
+    }
+
+    func testOldStarterPotIsReplacedByBonuses() throws {
+        var s = HouseholdState.starter()
+        let old = ["$1", "$5", "Pick dinner", "Skip a chore", "$10", "$20 jackpot"].map { Prize(name: $0, weight: 1) }
+        try s.setPrizePot(old, by: .kira)
+        XCTAssertEqual(s.prizes.map(\.name), Prize.starterPot.map(\.name))
+        try s.setPrizePot([Prize(name: "50¢", weight: 60), Prize(name: "$1", weight: 40)], by: .kira)
+        XCTAssertEqual(s.prizes.map(\.name), Prize.starterPot.map(\.name))
+        XCTAssertEqual(Prize.starterPot.last?.name, "$5 jackpot")
+        try s.setPrizePot([Prize(name: "$2", weight: 1)], by: .kira)
+        XCTAssertEqual(s.prizes.map(\.name), ["$2"])
+    }
+
+    func testPrizeCentsAndEarnings() throws {
+        XCTAssertEqual(Prize.cents(in: "5¢"), 5)
+        XCTAssertEqual(Prize.cents(in: "25 cents"), 25)
+        XCTAssertEqual(Prize.cents(in: "$1"), 100)
+        XCTAssertEqual(Prize.cents(in: "$5 jackpot"), 500)
+        XCTAssertEqual(Prize.cents(in: "$0.5"), 50)
+        XCTAssertNil(Prize.cents(in: "Pick dinner"))
+        XCTAssertEqual(Prize.format(cents: 135), "$1.35")
+        XCTAssertEqual(Prize.format(cents: 50), "50¢")
+        XCTAssertEqual(Prize.format(cents: 500), "$5")
+
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(3).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        try s.setPrizePot([Prize(name: "25¢", weight: 1)], by: .kira)
+        for t in s.blitz!.tasks.prefix(2) { try s.markDone(taskID: t.id, by: .reagen, now: t0) }
+        let a = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        try s.markSpinPaid(a.id, by: .brandon, now: t0)
+        XCTAssertEqual(s.earnings(for: .reagen), Earnings(owedCents: 25, paidCents: 25, spins: 2))
+        XCTAssertEqual(s.earnings(for: .reagen).totalCents, 50)
+    }
+
+    // Game mode sanity checks (Nov 2026 review).
+
+    func testUndoingAndRedoingAChoreDoesNotFarmSpins() throws {
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(3).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        let task = s.blitz!.tasks[0].id
+        try s.claim(taskID: task, by: .reagen)
+        try s.markDone(taskID: task, by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        try s.markNotDone(taskID: task, by: .reagen)
+        try s.markDone(taskID: task, by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0))
+    }
+
+    func testReagenCannotFinishSomeoneElsesChoreForASpin() throws {
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(2).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        let task = s.blitz!.tasks[0].id
+        try s.claim(taskID: task, by: .braden)
+        XCTAssertThrowsError(try s.markDone(taskID: task, by: .reagen, now: t0))
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+    }
+
+    func testParentFinishingReagensChoreStillGivesHimTheSpin() throws {
+        var s = HouseholdState.starter()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        try s.startBlitz(by: .kira, choreIDs: s.chores.prefix(2).map(\.id), minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        let task = s.blitz!.tasks[0].id
+        try s.claim(taskID: task, by: .reagen)
+        try s.markDone(taskID: task, by: .kira, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+    }
+
+    // Redesign (Nov 2026): chests carry over, pay all at once, bigger chores earn more.
+
+    func testUnopenedChestsCarryOverWhenTheTVIsCleared() throws {
+        var s = try gameBlitz()
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[0], by: .reagen, now: t0)
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+        try s.clearBlitz(by: .kira)
+        XCTAssertNil(s.blitz)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+        let spin = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(spin.blitzID, HouseholdState.bankedSpinID)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 0)
+        XCTAssertThrowsError(try s.spin(by: .reagen, roll: 0.1, now: t0)) {
+            XCTAssertEqual($0 as? ChoreError, .noSpinsLeft)
+        }
+    }
+
+    func testUnopenedChestsCarryOverIntoANewList() throws {
+        var s = try gameBlitz()
+        for id in s.blitz!.tasks.map(\.id) { try s.markDone(taskID: id, by: .reagen, now: t0) }
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 2)
+        try s.startBlitz(by: .kira, choreIDs: [dishes.id], minutes: nil, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 2)
+        try s.markDone(taskID: s.blitz!.tasks[0].id, by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 3)
+        // Chests from the current list are used first, then the carried-over ones.
+        let fromList = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(fromList.blitzID, s.blitz!.id)
+        let carried = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(carried.blitzID, HouseholdState.bankedSpinID)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 1)
+    }
+
+    func testMarkAllSpinsPaid() throws {
+        var s = try gameBlitz()
+        let ids = s.blitz!.tasks.map(\.id)
+        try s.markDone(taskID: ids[0], by: .reagen, now: t0)
+        try s.markDone(taskID: ids[1], by: .reagen, now: t0)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        _ = try s.spin(by: .reagen, roll: 0.1, now: t0)
+        XCTAssertEqual(s.earnings(for: .reagen).owedCents, 200)
+        XCTAssertThrowsError(try s.markAllSpinsPaid(for: .reagen, by: .reagen, now: t0))
+        try s.markAllSpinsPaid(for: .reagen, by: .brandon, now: t0)
+        XCTAssertEqual(s.earnings(for: .reagen), Earnings(owedCents: 0, paidCents: 200, spins: 2))
+        XCTAssertTrue(s.unpaidSpins.isEmpty)
+    }
+
+    func testBiggerChoresEarnMoreChests() throws {
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 1), 1)
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 10), 1)
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 14), 1)
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 15), 2)
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 20), 2)
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 30), 3)
+        XCTAssertEqual(HouseholdState.chests(forMinutes: 120), 3)
+        var s = HouseholdState.starter()
+        let big = Chore(name: "Clean the garage", room: "Garage", minutes: 30, steps: [])
+        try s.addChore(big, by: .kira)
+        try s.startBlitz(by: .kira, choreIDs: [big.id], minutes: nil, now: t0)
+        try s.setGameMode(true, by: .kira)
+        try s.markDone(taskID: s.blitz!.tasks[0].id, by: .reagen, now: t0)
+        XCTAssertEqual(s.spinsLeft(for: .reagen), 3)
+    }
+
+    func testTVMusicSwitchAndJackpot() throws {
+        var s = HouseholdState.starter()
+        XCTAssertTrue(s.isMusicOn)
+        XCTAssertThrowsError(try s.setTVMusic(false, by: .braden))
+        try s.setTVMusic(false, by: .reagen)
+        XCTAssertFalse(s.isMusicOn)
+        XCTAssertTrue(s.isJackpot(Prize.starterPot.last!))
+        XCTAssertFalse(s.isJackpot(Prize.starterPot[0]))
+        try s.setPrizePot([Prize(name: "25¢", weight: 97), Prize(name: "$10", weight: 3)], by: .kira)
+        XCTAssertTrue(s.isJackpot(s.prizes[1]))
+        XCTAssertFalse(s.isJackpot(s.prizes[0]))
+    }
+
+    func testOldSavedStateWithoutNewGameFieldsStillLoads() throws {
+        let old = try JSONEncoder().encode(HouseholdState.starter())
+        let s = try JSONDecoder().decode(HouseholdState.self, from: old)
+        XCTAssertTrue(s.isMusicOn)
+        XCTAssertEqual(s.bankedChests(for: .reagen), 0)
     }
 }

@@ -1,0 +1,142 @@
+import ChoreKit
+import SwiftUI
+
+
+/// Pixel bursts, ka-ching, level-ups and spin reveals on the TV when Game
+/// mode is on. Watches the shared state and reacts to what changed.
+struct GameLayer: View {
+    let state: HouseholdState
+    @State private var knownDone: Set<UUID>?
+    @State private var knownSpins: Set<UUID>?
+    @State private var knownLevel = 0
+    @State private var bursts: [BurstEvent] = []
+    @State private var banner: String?
+    @State private var reveal: Spin?
+    @State private var revealStart = Date()
+
+    struct BurstEvent: Identifiable {
+        let id = UUID()
+        let origin: CGPoint
+        let start: Date
+        let seed: UInt64
+        let label: String
+        var colors: [Color] = [.yellow, .cyan, .mint, .pink, .orange, .white]
+        var count = 64
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                if let banner {
+                    Text(banner)
+                        .font(.system(size: 120, weight: .black, design: .monospaced))
+                        .foregroundStyle(.yellow)
+                        .shadow(color: .orange, radius: 0, x: 8, y: 8)
+                        .transition(.scale.combined(with: .opacity))
+                }
+                if reveal != nil {
+                    // Darken the board so the spin reads from across the room.
+                    Color.black.opacity(0.65).ignoresSafeArea().transition(.opacity)
+                }
+                if let reveal {
+                    VStack(spacing: 30) {
+                        Text("\(reveal.person.name.uppercased()) OPENS A CHEST!")
+                            .font(.system(size: 56, weight: .black, design: .monospaced))
+                            .foregroundStyle(.white)
+                        LootChestView(start: revealStart, prize: reveal.prize, size: 560)
+                    }
+                    .padding(.horizontal, 80)
+                    .padding(.vertical, 40)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.12, green: 0.04, blue: 0.22)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.yellow, lineWidth: 6))
+                    .transition(.scale)
+                }
+            }
+            // Bursts draw on top of everything, including the spin panel.
+            .overlay {
+                ForEach(bursts) { b in
+                    PixelBurst(origin: b.origin, start: b.start, count: b.count, colors: b.colors, seed: b.seed)
+                    if !b.label.isEmpty {
+                        FloatingLabel(text: b.label, origin: b.origin, start: b.start)
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .onChange(of: state, initial: true) { _, new in react(to: new, size: geo.size) }
+        }
+        .allowsHitTesting(false)
+    }
+
+    func react(to s: HouseholdState, size: CGSize) {
+        let blitz = s.blitz
+        let done = Set(blitz?.tasks.filter { $0.doneAt != nil }.map(\.id) ?? [])
+        let spins = Set(s.allSpins.map(\.id))
+        defer { knownDone = done; knownSpins = spins }
+        // First load: remember what's there, don't celebrate old stuff.
+        guard let oldDone = knownDone, let oldSpins = knownSpins else {
+            if let b = blitz { knownLevel = level(forXP: familyXP(b)).level }
+            return
+        }
+        guard s.isGameMode else { return }
+
+        let newlyDone = done.subtracting(oldDone)
+        for (i, id) in newlyDone.enumerated() {
+            let task = blitz?.tasks.first { $0.id == id }
+            // Burst over the lane of whoever finished it, where their score ticks up.
+            let lane = CGFloat(Person.allCases.firstIndex(of: task?.claimedBy ?? .brandon) ?? 0)
+            let origin = CGPoint(x: size.width * CGFloat.random(in: 0.76...0.84),
+                                 y: size.height * (0.28 + lane * 0.19))
+            let label = "+\(max(task?.minutes ?? 1, 1)) XP"
+            bursts.append(BurstEvent(origin: origin, start: Date().addingTimeInterval(Double(i) * 0.3),
+                                     seed: UInt64.random(in: 1...UInt64.max), label: label))
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.3) {
+                GameAudio.shared.kaching()
+                GameAudio.shared.gem()
+            }
+        }
+        if !newlyDone.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                bursts.removeAll { Date().timeIntervalSince($0.start) > 2 }
+            }
+        }
+        if let b = blitz {
+            let lv = level(forXP: familyXP(b)).level
+            if lv > knownLevel && !newlyDone.isEmpty {
+                show(banner: "LEVEL \(lv)!")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { GameAudio.shared.levelUp() }
+            }
+            knownLevel = lv
+        }
+
+        if let newest = s.allSpins.last(where: { !oldSpins.contains($0.id) }) {
+            revealStart = Date()
+            withAnimation(.spring) { reveal = newest }
+            GameAudio.shared.lootSequence(big: s.isJackpot(newest.prize))
+            DispatchQueue.main.asyncAfter(deadline: .now() + LootTiming.land) {
+                // Gold pixel shower around the spin panel when the prize lands.
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let spots = [CGPoint(x: c.x - 480, y: c.y - 260), CGPoint(x: c.x + 480, y: c.y - 260),
+                             CGPoint(x: c.x - 480, y: c.y + 260), CGPoint(x: c.x + 480, y: c.y + 260),
+                             CGPoint(x: c.x, y: c.y - 330)]
+                for (i, p) in spots.enumerated() {
+                    bursts.append(BurstEvent(origin: p, start: Date().addingTimeInterval(Double(i) * 0.12),
+                                             seed: UInt64(11 + i), label: "", colors: PixelBurst.gold, count: 80))
+                }
+                bursts.append(BurstEvent(origin: CGPoint(x: c.x, y: c.y + 330), start: Date().addingTimeInterval(0.3),
+                                         seed: 99, label: "", colors: PixelBurst.gold, count: 80))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    bursts.removeAll { Date().timeIntervalSince($0.start) > 2 }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 7) {
+                withAnimation { if reveal?.id == newest.id { reveal = nil } }
+            }
+        }
+    }
+
+    func show(banner text: String) {
+        withAnimation(.spring) { banner = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { withAnimation { banner = nil } }
+    }
+}
+
